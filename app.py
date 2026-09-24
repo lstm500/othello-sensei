@@ -40,19 +40,20 @@ C_SQUARES = {(0, 1), (1, 0), (0, 6), (1, 7), (6, 0), (7, 1), (6, 7), (7, 6)}
 st.markdown("""
 <style>
 :root {
-    --bg: #090909;
-    --surface: #141414;
-    --surface-2: #1c1c1c;
-    --surface-3: #242424;
-    --border: #353535;
-    --text: #ffffff;
-    --muted: #bdbdbd;
-    --button: #ffffff;
-    --button-text: #111111;
-    --green: #32c26b;
-    --green-soft: rgba(50,194,107,.14);
-    --green-border: rgba(50,194,107,.48);
-    --shadow: 0 14px 34px rgba(0,0,0,.36);
+    --bg: #f5f6f3;
+    --surface: #ffffff;
+    --surface-2: #f0f2ee;
+    --surface-3: #e7ebe5;
+    --border: #cfd5ce;
+    --text: #111111;
+    --muted: #5c655f;
+    --button: #111111;
+    --button-text: #ffffff;
+    --green: #198754;
+    --green-dark: #12683f;
+    --green-soft: #e8f5ed;
+    --green-border: #9fd4b4;
+    --shadow: 0 12px 30px rgba(17,17,17,.08);
 }
 
 html, body, [class*="css"] { color: var(--text); }
@@ -60,7 +61,7 @@ html, body, [class*="css"] { color: var(--text); }
 .stApp {
     color: var(--text);
     background:
-        radial-gradient(circle at 50% -10%, rgba(50,194,107,.08), transparent 30%),
+        radial-gradient(circle at 50% -12%, rgba(25,135,84,.07), transparent 32%),
         var(--bg);
 }
 section.main > div { background: transparent; }
@@ -78,7 +79,7 @@ section.main > div { background: transparent; }
     border-radius: 24px;
     padding: 1.2rem 1rem 1.15rem;
     margin-bottom: 1.2rem;
-    background: linear-gradient(180deg, #181818 0%, #101010 100%);
+    background: #ffffff;
     box-shadow: var(--shadow);
 }
 .hero-panel::after {
@@ -87,7 +88,7 @@ section.main > div { background: transparent; }
     left: 0;
     right: 0;
     bottom: 0;
-    height: 3px;
+    height: 4px;
     background: var(--green);
 }
 .hero-kicker {
@@ -95,7 +96,7 @@ section.main > div { background: transparent; }
     font-size: .72rem;
     font-weight: 800;
     letter-spacing: .18em;
-    color: var(--green);
+    color: var(--green-dark);
     margin-bottom: .45rem;
 }
 .big-title {
@@ -120,20 +121,20 @@ section.main > div { background: transparent; }
     justify-content:center;
 }
 .hero-chip {
-    background: #202020;
-    border: 1px solid #373737;
-    color: #ffffff;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
     padding: .42rem .7rem;
     border-radius: 999px;
     font-size: .88rem;
-    font-weight: 700;
+    font-weight: 750;
 }
 
 .small-note {font-size:.88rem; color:var(--muted);}
+h1, h2, h3, h4, h5, h6 { color: var(--text) !important; }
 h3 {
-    color: var(--text) !important;
     font-size: 1.65rem !important;
-    font-weight: 800 !important;
+    font-weight: 850 !important;
     margin-bottom: .25rem !important;
 }
 
@@ -148,44 +149,67 @@ h3 {
     box-shadow: var(--shadow);
 }
 .result-card { padding:16px; margin:10px 0; }
-.result-main {font-size:1.45rem; font-weight:900; text-align:center; color:var(--green);}
+.result-main {font-size:1.45rem; font-weight:900; text-align:center; color:var(--green-dark);}
 .kid-text {font-size:1.15rem; line-height:1.7; text-align:center; color:var(--text);}
 
-/* ボタンは白地＋黒文字で統一。緑は枠・フォーカス・状態表示に限定。 */
+/* 明るい背景では、主要ボタンを黒地＋白文字に固定。 */
 div.stButton > button,
 [data-testid="baseButton-secondary"],
-[data-testid="baseButton-primary"] {
+[data-testid="baseButton-primary"],
+[data-testid="stCameraInput"] button,
+[data-testid="stFileUploader"] button {
     border-radius:16px !important;
     min-height:54px;
     font-weight:850;
     letter-spacing:.01em;
-    border: 1px solid #ffffff !important;
-    background: #ffffff !important;
-    color: var(--button-text) !important;
-    box-shadow: 0 8px 20px rgba(0,0,0,.26);
+    border: 1px solid #111111 !important;
+    background: #111111 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    box-shadow: 0 7px 16px rgba(17,17,17,.13);
+}
+div.stButton > button *,
+[data-testid="baseButton-secondary"] *,
+[data-testid="baseButton-primary"] *,
+[data-testid="stCameraInput"] button *,
+[data-testid="stFileUploader"] button * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
 div.stButton > button:hover,
 [data-testid="baseButton-secondary"]:hover,
-[data-testid="baseButton-primary"]:hover {
-    background: #f1f1f1 !important;
+[data-testid="baseButton-primary"]:hover,
+[data-testid="stCameraInput"] button:hover,
+[data-testid="stFileUploader"] button:hover {
+    background: #242424 !important;
     border-color: var(--green) !important;
 }
 div.stButton > button:focus,
 [data-testid="baseButton-secondary"]:focus,
 [data-testid="baseButton-primary"]:focus {
-    box-shadow: 0 0 0 3px rgba(50,194,107,.28), 0 8px 20px rgba(0,0,0,.26) !important;
+    box-shadow: 0 0 0 3px rgba(25,135,84,.22), 0 7px 16px rgba(17,17,17,.13) !important;
+}
+
+/* 無効ボタンも文字が消えないよう固定。 */
+.stApp .block-container button:disabled,
+.stApp .block-container button:disabled * {
+    background: #d9ddd8 !important;
+    color: #343a36 !important;
+    -webkit-text-fill-color: #343a36 !important;
+    border-color: #c6cbc5 !important;
+    opacity: 1 !important;
 }
 
 [data-testid="stCameraInput"] {margin-top:.35rem; padding: .85rem;}
 [data-testid="stFileUploader"] {margin-top:.25rem; padding: .85rem;}
 [data-testid="stExpander"] { padding: .35rem .5rem; }
 [data-testid="stExpander"] summary {
-    background: #181818 !important;
+    background: var(--surface-2) !important;
     border-radius: 16px !important;
     color: var(--text) !important;
 }
 
-/* Streamlit標準の文字色を明示して見切れ・同化を防ぐ */
+/* Streamlit標準テキストは明るい背景向けに黒系へ固定。 */
 .stApp [data-testid="stMarkdownContainer"],
 .stApp [data-testid="stMarkdownContainer"] p,
 .stApp [data-testid="stMarkdownContainer"] li,
@@ -195,30 +219,21 @@ div.stButton > button:focus,
 .stApp small,
 [data-testid="stExpander"] summary,
 [data-testid="stExpander"] summary p,
-[data-testid="stExpander"] summary span {
+[data-testid="stExpander"] summary span,
+[data-testid="stCameraInput"] p,
+[data-testid="stCameraInput"] span,
+[data-testid="stFileUploader"] p,
+[data-testid="stFileUploader"] span {
     color: var(--text) !important;
+    -webkit-text-fill-color: var(--text) !important;
 }
 [data-testid="stCaptionContainer"],
-[data-testid="stCaptionContainer"] p { color: var(--muted) !important; }
-
-/* 白ボタン内は必ず黒文字 */
-div.stButton > button,
-div.stButton > button p,
-div.stButton > button span,
-[data-testid="baseButton-secondary"],
-[data-testid="baseButton-secondary"] p,
-[data-testid="baseButton-secondary"] span,
-[data-testid="baseButton-primary"],
-[data-testid="baseButton-primary"] p,
-[data-testid="baseButton-primary"] span,
-[data-testid="stCameraInput"] button,
-[data-testid="stCameraInput"] button p,
-[data-testid="stFileUploader"] button,
-[data-testid="stFileUploader"] button p {
-    color: var(--button-text) !important;
+[data-testid="stCaptionContainer"] p {
+    color: var(--muted) !important;
+    -webkit-text-fill-color: var(--muted) !important;
 }
 
-/* StreamlitのMarkdown文字色指定より強く、白ボタン内は必ず黒にする。 */
+/* ボタン内だけは上の全体文字指定を上書きして白にする。 */
 .stApp .block-container button,
 .stApp .block-container button *,
 .stApp .block-container button [data-testid="stMarkdownContainer"],
@@ -227,51 +242,40 @@ div.stButton > button span,
 .stApp .block-container [data-testid="stCameraInput"] button *,
 .stApp .block-container [data-testid="stFileUploader"] button,
 .stApp .block-container [data-testid="stFileUploader"] button * {
-    color: #111111 !important;
-    -webkit-text-fill-color: #111111 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
-
-/* 上記のボタンは背景も白に固定し、文字とのコントラストを保証する。 */
-.stApp .block-container div.stButton > button,
-.stApp .block-container [data-testid="stCameraInput"] button,
-.stApp .block-container [data-testid="stFileUploader"] button {
-    background: #ffffff !important;
-    border-color: #ffffff !important;
-}
-
-/* 無効化された撮影ボタンも、灰色地に灰色文字にならないよう可読性を固定。 */
 .stApp .block-container button:disabled,
 .stApp .block-container button:disabled * {
-    background: #d9d9d9 !important;
-    color: #111111 !important;
-    -webkit-text-fill-color: #111111 !important;
-    border-color: #d9d9d9 !important;
-    opacity: 1 !important;
+    color: #343a36 !important;
+    -webkit-text-fill-color: #343a36 !important;
 }
-
-[data-testid="stCameraInput"] p,
-[data-testid="stCameraInput"] span,
-[data-testid="stFileUploader"] p,
-[data-testid="stFileUploader"] span { color: var(--text) !important; }
 
 /* selectbox / radio / input */
 [data-baseweb="select"] > div,
 [data-testid="stRadio"] > div,
 [data-testid="stTextInput"] input {
-    background: var(--surface-2) !important;
+    background: #ffffff !important;
     color: var(--text) !important;
-    border: 1px solid #3a3a3a !important;
+    border: 1px solid var(--border) !important;
     border-radius: 14px !important;
 }
 [data-baseweb="select"] span,
 [data-testid="stRadio"] label,
 [data-testid="stRadio"] p,
-[data-testid="stTextInput"] input { color: var(--text) !important; }
-[role="listbox"], [role="option"] {
-    background: #1c1c1c !important;
-    color: #ffffff !important;
+[data-testid="stTextInput"] input {
+    color: var(--text) !important;
+    -webkit-text-fill-color: var(--text) !important;
 }
-[role="option"]:hover { background: #292929 !important; }
+[role="listbox"], [role="option"] {
+    background: #ffffff !important;
+    color: #111111 !important;
+}
+[role="option"] * {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+[role="option"]:hover { background: var(--green-soft) !important; }
 
 .mode-card,
 .think-card,
@@ -280,11 +284,11 @@ div.stButton > button span,
     border-radius: 20px;
     padding: 1rem;
     margin: .65rem 0;
-    background: linear-gradient(180deg, #171717 0%, #111111 100%);
+    background: #ffffff;
     box-shadow: var(--shadow);
 }
 .mode-title {
-    color: var(--green);
+    color: var(--green-dark);
     font-size: 1.15rem;
     font-weight: 900;
     margin-bottom: .3rem;
@@ -296,8 +300,8 @@ div.stButton > button span,
     padding:.35rem .65rem;
     background:var(--green-soft);
     border:1px solid var(--green-border);
-    color:#bff2d2;
-    font-weight:800;
+    color:var(--green-dark);
+    font-weight:850;
     margin:.2rem 0 .65rem;
 }
 .feedback-good,
@@ -310,12 +314,12 @@ div.stButton > button span,
     border:1px solid var(--border);
     color: var(--text);
 }
-.feedback-good {background:rgba(50,194,107,.11); border-color:var(--green-border);}
-.feedback-bad {background:#1b1b1b; border-color:#555;}
-.feedback-neutral {background:#181818; border-color:#3f3f3f;}
-.feedback-good b {color:#83e6aa;}
-.feedback-bad b {color:#ffffff;}
-.feedback-neutral b {color:#ffffff;}
+.feedback-good {background:var(--green-soft); border-color:var(--green-border);}
+.feedback-bad {background:#f3f3f1; border-color:#cfd1ce;}
+.feedback-neutral {background:#f8f8f6; border-color:#d8dbd6;}
+.feedback-good b {color:var(--green-dark);}
+.feedback-bad b,
+.feedback-neutral b {color:#111111;}
 .level-meter {
     display:flex;
     gap:.35rem;
@@ -326,21 +330,27 @@ div.stButton > button span,
     width:28px;
     height:8px;
     border-radius:99px;
-    background:#343434;
+    background:#d7dbd6;
 }
 .level-dot.on { background:var(--green); }
 
 [data-testid="stAlert"] {
-    background: #161616 !important;
-    border: 1px solid #3b3b3b !important;
+    background: #ffffff !important;
+    border: 1px solid var(--border) !important;
     color: var(--text) !important;
 }
-[data-testid="stAlert"] * { color: var(--text) !important; }
+[data-testid="stAlert"] * {
+    color: var(--text) !important;
+    -webkit-text-fill-color: var(--text) !important;
+}
 [data-testid="stProgress"] p,
-[data-testid="stProgress"] span { color: var(--text) !important; }
+[data-testid="stProgress"] span {
+    color: var(--text) !important;
+    -webkit-text-fill-color: var(--text) !important;
+}
 
 .lesson-head { padding:16px 16px 12px; margin:.4rem 0 1rem; }
-.lesson-stage {font-size:.9rem; color:var(--green); font-weight:800; margin-bottom:.25rem;}
+.lesson-stage {font-size:.9rem; color:var(--green-dark); font-weight:850; margin-bottom:.25rem;}
 .lesson-title {font-size:1.45rem; font-weight:900; line-height:1.35; color:var(--text);}
 .lesson-goal {font-size:1.02rem; line-height:1.65; margin-top:.65rem; color:var(--text);}
 .lesson-point {
@@ -359,17 +369,17 @@ div.stButton > button span,
     text-align:center;
     padding:.8rem;
     border-radius:14px;
-    background: #202020;
-    border: 1px solid #393939;
+    background: #f0f2ee;
+    border: 1px solid var(--border);
     border-bottom: 3px solid var(--green);
     margin:.65rem 0;
     color:var(--text);
 }
 
-hr { border-color: #323232; }
+hr { border-color: #d8ddd7; }
 [data-testid="stImage"] img {
     border-radius: 18px;
-    border: 1px solid #383838;
+    border: 1px solid var(--border);
     box-shadow: var(--shadow);
 }
 

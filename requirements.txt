@@ -1,6 +1,5 @@
-streamlit>=1.50,<2
+streamlit>=1.63,<2
 opencv-python-headless>=4.10,<5
 numpy>=1.26,<3
 Pillow>=10,<13
 streamlit-image-coordinates>=0.4.1,<1
-streamlit-back-camera-input==0.1.1

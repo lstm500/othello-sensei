@@ -1,6 +1,5 @@
 import math
 import json
-import threading
 from io import BytesIO
 from functools import lru_cache
 
@@ -17,17 +16,242 @@ except Exception:
     streamlit_image_coordinates = None
     IMAGE_COORDINATES_AVAILABLE = False
 
-try:
-    from streamlit_back_camera_input import back_camera_input
-    BACK_CAMERA_AVAILABLE = True
-except Exception:
-    back_camera_input = None
-    BACK_CAMERA_AVAILABLE = False
 
 # -----------------------------
 # 基本設定
 # -----------------------------
 st.set_page_config(page_title="オセロせんせい", page_icon="⚫", layout="centered")
+
+# -----------------------------
+# スマホ背面カメラ（Streamlit Components v2）
+# -----------------------------
+# Streamlit 標準 camera_input は初期カメラを指定できないため、ホームの主カメラは
+# ブラウザの getUserMedia() を直接使う。最初に facingMode=environment を厳密指定し、
+# 失敗時だけ段階的にフォールバックする。撮影画像は data URL で Python 側へ返す。
+REAR_CAMERA_COMPONENT_AVAILABLE = hasattr(st.components, "v2")
+REAR_CAMERA_COMPONENT = None
+if REAR_CAMERA_COMPONENT_AVAILABLE:
+    REAR_CAMERA_COMPONENT = st.components.v2.component(
+        name="othello_rear_camera",
+        html="""
+        <div class="camera-shell">
+          <div class="video-wrap">
+            <video id="cameraVideo" autoplay playsinline muted></video>
+            <div id="cameraBadge" class="badge">外向きカメラを準備中…</div>
+          </div>
+          <div id="cameraStatus" class="status">カメラへのアクセスを許可してください。</div>
+          <div class="camera-actions">
+            <button id="captureBtn" class="capture" type="button">📷 この盤面を撮る</button>
+            <button id="switchBtn" class="switch" type="button">↻ カメラ切替</button>
+            <button id="retryBtn" class="retry" type="button">カメラを開く</button>
+          </div>
+          <canvas id="captureCanvas" hidden></canvas>
+        </div>
+        """,
+        css="""
+        .camera-shell {
+          width: 100%; box-sizing: border-box; font-family: var(--st-font);
+          color: #111; background: #fff; border: 1px solid #cfd5ce;
+          border-radius: 18px; padding: 10px; box-shadow: 0 8px 24px rgba(17,17,17,.07);
+        }
+        .video-wrap { position: relative; width: 100%; overflow: hidden; border-radius: 14px; background: #111; aspect-ratio: 4 / 3; }
+        #cameraVideo { width: 100%; height: 100%; object-fit: cover; display: block; background: #111; }
+        .badge { position: absolute; left: 10px; top: 10px; background: rgba(17,17,17,.78); color:#fff; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800; }
+        .status { margin: 9px 2px 8px; font-size: 13px; color:#4f5b54; line-height:1.45; }
+        .camera-actions { display:grid; grid-template-columns: 1fr auto; gap:8px; }
+        button { min-height: 50px; border-radius: 14px; font-weight: 850; cursor:pointer; font-size: 15px; }
+        .capture { background:#111; color:#fff; border:1px solid #111; }
+        .switch, .retry { background:#fff; color:#111; border:1px solid #b9c2bc; }
+        .retry { grid-column: 1 / -1; display:none; }
+        button:disabled { opacity:.5; cursor:default; }
+        @media (max-width:520px) {
+          .camera-actions { grid-template-columns: 1fr; }
+          .switch, .retry { width:100%; }
+        }
+        """,
+        js=r"""
+        export default function({ parentElement, setTriggerValue }) {
+          const video = parentElement.querySelector('#cameraVideo');
+          const canvas = parentElement.querySelector('#captureCanvas');
+          const captureBtn = parentElement.querySelector('#captureBtn');
+          const switchBtn = parentElement.querySelector('#switchBtn');
+          const retryBtn = parentElement.querySelector('#retryBtn');
+          const status = parentElement.querySelector('#cameraStatus');
+          const badge = parentElement.querySelector('#cameraBadge');
+
+          if (!parentElement.__othelloCameraState) {
+            parentElement.__othelloCameraState = { stream: null, starting: false, devices: [], currentDeviceId: null };
+          }
+          const state = parentElement.__othelloCameraState;
+
+          function stopCurrent() {
+            if (state.stream) {
+              state.stream.getTracks().forEach(t => t.stop());
+              state.stream = null;
+            }
+            video.srcObject = null;
+          }
+
+          async function refreshDevices() {
+            try {
+              const all = await navigator.mediaDevices.enumerateDevices();
+              state.devices = all.filter(d => d.kind === 'videoinput');
+            } catch (e) {
+              state.devices = [];
+            }
+          }
+
+          function describeTrack(stream) {
+            const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+            if (!track) return { facing: '', deviceId: '', label: '' };
+            const settings = track.getSettings ? track.getSettings() : {};
+            return {
+              facing: settings.facingMode || '',
+              deviceId: settings.deviceId || '',
+              label: track.label || ''
+            };
+          }
+
+          async function requestStream(constraints) {
+            stopCurrent();
+            const stream = await navigator.mediaDevices.getUserMedia({video: constraints, audio: false});
+            state.stream = stream;
+            video.srcObject = stream;
+            await video.play();
+            const info = describeTrack(stream);
+            state.currentDeviceId = info.deviceId || null;
+            await refreshDevices();
+            return info;
+          }
+
+          async function tryRearCamera() {
+            if (state.starting) return;
+            state.starting = true;
+            captureBtn.disabled = true;
+            switchBtn.disabled = true;
+            retryBtn.style.display = 'none';
+            status.textContent = '外向きカメラを開いています…';
+            badge.textContent = '外向きカメラを準備中…';
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+              status.textContent = 'このブラウザではカメラを利用できません。下の「別の方法で撮る」を使ってください。';
+              badge.textContent = 'カメラ利用不可';
+              retryBtn.style.display = 'block';
+              state.starting = false;
+              return;
+            }
+
+            let info = null;
+            let lastError = null;
+            try {
+              // Android / iPhone で最初から背面カメラを要求する。
+              info = await requestStream({
+                facingMode: { exact: 'environment' },
+                width: { ideal: 1280 },
+                height: { ideal: 960 }
+              });
+            } catch (e1) {
+              lastError = e1;
+              try {
+                info = await requestStream({
+                  facingMode: { ideal: 'environment' },
+                  width: { ideal: 1280 },
+                  height: { ideal: 960 }
+                });
+              } catch (e2) {
+                lastError = e2;
+                try {
+                  // facingMode を実装していないブラウザ向け最終フォールバック。
+                  info = await requestStream({width:{ideal:1280}, height:{ideal:960}});
+                } catch (e3) {
+                  lastError = e3;
+                }
+              }
+            }
+
+            if (!info) {
+              stopCurrent();
+              status.textContent = 'カメラを開けませんでした。ブラウザのカメラ権限を確認して、もう一度押してください。';
+              badge.textContent = 'カメラを開けません';
+              retryBtn.style.display = 'block';
+              state.starting = false;
+              return;
+            }
+
+            // facingMode が取れない機種では、許可後にカメラ名から背面を探して切り替える。
+            const looksRear = (info.facing === 'environment') || /back|rear|environment|背面|後/i.test(info.label || '');
+            if (!looksRear && state.devices.length > 1) {
+              const rear = state.devices.find(d => /back|rear|environment|背面|後/i.test(d.label || ''));
+              if (rear && rear.deviceId && rear.deviceId !== info.deviceId) {
+                try {
+                  info = await requestStream({deviceId:{exact:rear.deviceId}, width:{ideal:1280}, height:{ideal:960}});
+                } catch (_) {}
+              }
+            }
+
+            const finalInfo = describeTrack(state.stream);
+            const finalRear = finalInfo.facing === 'environment' || /back|rear|environment|背面|後/i.test(finalInfo.label || '');
+            if (finalRear) {
+              badge.textContent = '外向きカメラ';
+              status.textContent = '外向きカメラで盤面全体を写して、「この盤面を撮る」を押してください。';
+            } else {
+              badge.textContent = 'カメラ';
+              status.textContent = '外向きカメラを自動判定できませんでした。「カメラ切替」で背面カメラを選んでください。';
+            }
+            captureBtn.disabled = false;
+            switchBtn.disabled = state.devices.length < 2;
+            state.starting = false;
+          }
+
+          async function switchCamera() {
+            if (state.starting) return;
+            state.starting = true;
+            switchBtn.disabled = true;
+            try {
+              await refreshDevices();
+              if (state.devices.length < 2) return;
+              let idx = state.devices.findIndex(d => d.deviceId === state.currentDeviceId);
+              idx = (idx + 1) % state.devices.length;
+              const next = state.devices[idx];
+              const info = await requestStream({deviceId:{exact:next.deviceId}, width:{ideal:1280}, height:{ideal:960}});
+              const isRear = info.facing === 'environment' || /back|rear|environment|背面|後/i.test(info.label || '');
+              badge.textContent = isRear ? '外向きカメラ' : '内向きカメラ';
+              status.textContent = isRear ? '外向きカメラに切り替えました。' : '内向きカメラです。もう一度切替できます。';
+            } catch (e) {
+              status.textContent = 'カメラ切替に失敗しました。もう一度お試しください。';
+            } finally {
+              switchBtn.disabled = state.devices.length < 2;
+              state.starting = false;
+            }
+          }
+
+          captureBtn.onclick = () => {
+            if (!state.stream || !video.videoWidth || !video.videoHeight) return;
+            const maxW = 1400;
+            const scale = Math.min(1, maxW / video.videoWidth);
+            canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+            canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+            setTriggerValue('photo', dataUrl);
+          };
+          switchBtn.onclick = switchCamera;
+          retryBtn.onclick = tryRearCamera;
+
+          // 同じ key で rerun されたときは既存ストリームを維持する。初回だけ自動開始。
+          if (!state.stream && !state.starting) {
+            tryRearCamera();
+          } else if (state.stream) {
+            video.srcObject = state.stream;
+            captureBtn.disabled = false;
+          }
+
+          // ページ移動・コンポーネント破棄時はカメラを確実に解放する。
+          return () => { stopCurrent(); };
+        }
+        """,
+    )
 
 EMPTY = 0
 BLACK = 1
@@ -1713,6 +1937,7 @@ def reset_experiment(level=None, variant=None):
     st.session_state.experiment_board = board.copy()
     st.session_state.experiment_user_player = player
     st.session_state.experiment_history = []
+    st.session_state.experiment_pending = None
     st.session_state.experiment_step = 0
     st.session_state.experiment_custom = False
 
@@ -1723,6 +1948,7 @@ def set_experiment_from_board(board, player):
     st.session_state.experiment_board = board.copy()
     st.session_state.experiment_user_player = player
     st.session_state.experiment_history = []
+    st.session_state.experiment_pending = None
     st.session_state.experiment_step = 0
     st.session_state.experiment_custom = True
 
@@ -1827,13 +2053,16 @@ def play_experiment_turn(chosen):
     audio_parts.append("アニメーションを見たら、つぎの一手をまた考えてみよう。")
     record["audio_text"] = " ".join(audio_parts)
 
-    st.session_state.experiment_board = board
-    st.session_state.experiment_history.append(record)
-    st.session_state.experiment_step += 1
+    # 選択直後は次の盤面へ進めず、同じ盤面表示領域でアニメーションを見せる。
+    # 「次の一手へ」を押した時点で初めて after_board を現在盤面に反映する。
+    st.session_state.experiment_pending = record
 
 
 def undo_experiment_step():
-    """テスト盤面を1ターン前へ戻す。"""
+    """テスト盤面を1ターン前へ戻す。アニメーション確認中なら選択前へ戻す。"""
+    if st.session_state.get("experiment_pending") is not None:
+        st.session_state.experiment_pending = None
+        return True
     history = st.session_state.get("experiment_history", [])
     if not history:
         return False
@@ -1871,31 +2100,16 @@ def new_challenge(level=None, variant=None):
 # -----------------------------
 # セッション状態
 # -----------------------------
-class CameraFrameStore:
-    """WebRTC コールバックから最新フレームだけを安全に受け取る、セッション専用の箱。"""
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._frame = None
-
-    def put(self, frame_bgr):
-        with self._lock:
-            self._frame = frame_bgr.copy()
-
-    def get(self):
-        with self._lock:
-            return None if self._frame is None else self._frame.copy()
-
-
 if "page" not in st.session_state:
     st.session_state.page = "home"
-if "camera_frame_store" not in st.session_state:
-    st.session_state.camera_frame_store = CameraFrameStore()
 if "board" not in st.session_state:
     st.session_state.board = initial_board()
 if "photo_processed" not in st.session_state:
     st.session_state.photo_processed = None
 if "recognition_note" not in st.session_state:
     st.session_state.recognition_note = ""
+if "experiment_pending" not in st.session_state:
+    st.session_state.experiment_pending = None
 
 
 # -----------------------------
@@ -2025,13 +2239,18 @@ if st.session_state.page == "home":
     st.markdown("### 📷 盤面を撮る")
     st.caption("盤全体が入るように、なるべく真上から撮ってください。")
 
-    # ホームの主カメラは、スマホの背面カメラをデフォルトにする専用コンポーネントを使う。
-    # st.camera_input は前後カメラの初期値を指定できないため主カメラには使わない。
-    st.caption("外向き（背面）カメラをデフォルトで開きます。映像をタップすると撮影できます。")
-    if BACK_CAMERA_AVAILABLE:
-        rear_value = back_camera_input()
-        if rear_value:
-            rear_file = camera_value_to_file(rear_value)
+    # ホームの主カメラは Streamlit Components v2 でブラウザのカメラを直接制御する。
+    # facingMode=environment を最初に厳密指定するため、スマホでは背面カメラが初期候補になる。
+    st.caption("起動時は外向き（背面）カメラを指定します。盤面全体を写して撮影してください。")
+    if REAR_CAMERA_COMPONENT_AVAILABLE and REAR_CAMERA_COMPONENT is not None:
+        camera_result = REAR_CAMERA_COMPONENT(
+            key="rear_board_camera_v2",
+            on_photo_change=lambda: None,
+            width="stretch",
+        )
+        captured = getattr(camera_result, "photo", None)
+        if captured:
+            rear_file = camera_value_to_file(captured)
             if rear_file is None:
                 st.error("撮影画像を読み取れませんでした。もう一度撮影してください。")
             else:
@@ -2041,9 +2260,9 @@ if st.session_state.page == "home":
                 else:
                     st.error(err)
     else:
-        st.warning("背面カメラ機能を読み込めませんでした。requirements.txt も今回の版に更新してください。")
+        st.warning("この版のStreamlitでは背面カメラ機能を利用できません。requirements.txt も今回の版へ更新してください。")
 
-    # 端末・ブラウザ側で専用カメラが使えない場合だけ代替手段を開く。
+    # ブラウザ権限・端末相性で主カメラが開かない場合の代替手段。
     with st.expander("カメラが開かないとき / 別の方法で撮る", expanded=False):
         fallback_camera = st.camera_input(
             "標準カメラで撮る",
@@ -2221,92 +2440,95 @@ elif st.session_state.page == "experiment":
     user_player = st.session_state.experiment_user_player
     user_name = "くろ" if user_player == BLACK else "しろ"
     user_moves = legal_moves(board, user_player)
+    pending = st.session_state.get("experiment_pending")
     st.markdown(f'<span class="turn-badge">あなたは {user_name}</span>', unsafe_allow_html=True)
 
-    # テスト盤面も、盤面そのものをタップして着手する。
-    # 黄色い点がある合法手だけを有効化し、F3などの座標ボタンは表示しない。
-    if user_moves:
+    # テスト盤面は「選択する盤面」と「選択後のアニメーション」を同じ表示領域にする。
+    # pending がある間は別の盤面画像を下へ追加せず、ここ自体をGIFへ置き換える。
+    if pending is not None:
+        st.markdown('<div class="challenge-instruction">いま選んだ手を、この盤面でゆっくり見てみよう</div>', unsafe_allow_html=True)
+        experiment_gif = make_experiment_animation(
+            pending["before_board"],
+            pending["steps"],
+            size=720,
+        )
+        st.image(experiment_gif, use_container_width=True)
+    elif user_moves:
         st.markdown('<div class="challenge-instruction">黄色い点を盤面の上で直接タップしてね</div>', unsafe_allow_html=True)
         chosen = clickable_challenge_board(
             board,
             list(user_moves.keys()),
             f"experiment_{st.session_state.experiment_variant}_{st.session_state.experiment_step}",
         )
-    else:
-        st.image(render_board(board), use_container_width=True)
-        chosen = None
-
-    # 盤面のすぐ下に「1手戻る」を置く。思考実験をやり直しやすくするための主操作。
-    if st.button(
-        "↩ ひとつ前の盤面に戻る",
-        use_container_width=True,
-        disabled=not bool(st.session_state.experiment_history),
-        key="experiment_undo_under_board",
-    ):
-        if undo_experiment_step():
-            st.rerun()
-
-    if user_moves:
-        st.markdown("#### ここに置いたら、相手AIはどう返す？")
-        st.caption("黄色い点のあるマスを、そのままタップしてください。")
         if chosen is not None:
             with st.spinner("せんせいAIが先を考えています…"):
                 play_experiment_turn(chosen)
             st.rerun()
     else:
-        if legal_moves(board, -user_player):
-            st.info("あなたはおける場所がないのでパスです。1手戻るか、最初の盤面へ戻して比べられます。")
-        else:
-            st.success("この局面はゲーム終了です。")
+        st.image(render_board(board), use_container_width=True)
 
-    if st.session_state.experiment_history:
-        latest = st.session_state.experiment_history[-1]
-        st.markdown("#### いまの1手を、ゆっくり見てみよう")
+    # 盤面の直下に戻る操作を固定する。
+    undo_disabled = not bool(st.session_state.experiment_history) and pending is None
+    if st.button(
+        "↩ ひとつ前の盤面に戻る",
+        use_container_width=True,
+        disabled=undo_disabled,
+        key="experiment_undo_under_board",
+    ):
+        if undo_experiment_step():
+            st.rerun()
 
-        # 最新ターンをかなり遅いGIFで再生。黄色い輪→着手→1枚ずつ反転→相手の返し。
-        if latest.get("before_board") is not None and latest.get("steps"):
-            experiment_gif = make_experiment_animation(
-                latest["before_board"],
-                latest["steps"],
-            )
-            st.image(experiment_gif, use_container_width=True)
-            st.caption("黄色い輪が置く場所です。石は1枚ずつ、かなりゆっくり返ります。アニメーションは繰り返します。")
-
-        # 文字を読めない子でも流れを追えるよう、同じ内容をゆっくり読み上げる。
-        if latest.get("audio_text"):
+    if pending is not None:
+        # 文字を読めない子でも同じアニメーションを追えるよう音声を併設。
+        if pending.get("audio_text"):
             speech_controls(
-                latest["audio_text"],
-                play_label="🔊 この1手をゆっくり聞く",
-                rate=0.72,
+                pending["audio_text"],
+                play_label="🔊 この動きをゆっくり聞く",
+                rate=0.70,
                 height=70,
             )
 
-        same = latest["user_move"] == latest["teacher_user_move"]
+        same = pending["user_move"] == pending["teacher_user_move"]
         cls = "feedback-good" if same else "feedback-neutral"
-        title = "AIと同じ手！" if same else "別の手もくらべよう"
+        title = "この手から相手の考えを見てみよう" if same else "もう1つの手とも比べてみよう"
         st.markdown(
-            f'<div class="{cls}"><b>{title}</b><br>{latest["compare"]}</div>',
+            f'<div class="{cls}"><b>{title}</b><br>{pending["compare"]}</div>',
             unsafe_allow_html=True,
         )
-        if latest["reply_move"]:
+        if pending["reply_move"]:
             st.markdown(
-                f'<div class="feedback-neutral"><b>相手AIの返し：{latest["reply_move"]}</b><br>{latest["reply_reason"]}</div>',
+                f'<div class="feedback-neutral"><b>相手AIの返し：{pending["reply_move"]}</b><br>{pending["reply_reason"]}</div>',
                 unsafe_allow_html=True,
             )
-        for note in latest["passes"]:
+        for note in pending["passes"]:
             st.caption(note)
 
-        with st.expander("これまでの実験を見る", expanded=False):
-            for i, rec in enumerate(reversed(st.session_state.experiment_history), start=1):
-                n = len(st.session_state.experiment_history) - i + 1
-                reply = rec["reply_move"] or "パス"
-                st.write(f"{n}. あなた {rec['user_move']} → 相手AI {reply}")
+        if st.button("▶ この続きから次の一手を考える", use_container_width=True, type="primary", key="experiment_commit_pending"):
+            st.session_state.experiment_board = pending["after_board"].copy()
+            st.session_state.experiment_history.append(pending)
+            st.session_state.experiment_step += 1
+            st.session_state.experiment_pending = None
+            st.rerun()
+    else:
+        if not user_moves:
+            if legal_moves(board, -user_player):
+                st.info("あなたはおける場所がないのでパスです。1手戻るか、最初の盤面へ戻して比べられます。")
+            else:
+                st.success("この局面はゲーム終了です。")
+
+        if st.session_state.experiment_history:
+            with st.expander("これまでの実験を見る", expanded=False):
+                for i, rec in enumerate(reversed(st.session_state.experiment_history), start=1):
+                    n = len(st.session_state.experiment_history) - i + 1
+                    reply = rec["reply_move"] or "パス"
+                    st.write(f"{n}. あなた {rec['user_move']} → 相手AI {reply}")
 
     a, b = st.columns(2)
     if a.button("↩ 同じ最初の盤面に戻る", use_container_width=True):
         st.session_state.experiment_board = st.session_state.experiment_base_board.copy()
         st.session_state.experiment_user_player = st.session_state.experiment_base_player
         st.session_state.experiment_history = []
+        st.session_state.experiment_pending = None
         st.session_state.experiment_step = 0
         st.rerun()
     if b.button("🔄 別の盤面", use_container_width=True):

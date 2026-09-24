@@ -218,6 +218,37 @@ div.stButton > button span,
     color: var(--button-text) !important;
 }
 
+/* StreamlitのMarkdown文字色指定より強く、白ボタン内は必ず黒にする。 */
+.stApp .block-container button,
+.stApp .block-container button *,
+.stApp .block-container button [data-testid="stMarkdownContainer"],
+.stApp .block-container button [data-testid="stMarkdownContainer"] *,
+.stApp .block-container [data-testid="stCameraInput"] button,
+.stApp .block-container [data-testid="stCameraInput"] button *,
+.stApp .block-container [data-testid="stFileUploader"] button,
+.stApp .block-container [data-testid="stFileUploader"] button * {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+
+/* 上記のボタンは背景も白に固定し、文字とのコントラストを保証する。 */
+.stApp .block-container div.stButton > button,
+.stApp .block-container [data-testid="stCameraInput"] button,
+.stApp .block-container [data-testid="stFileUploader"] button {
+    background: #ffffff !important;
+    border-color: #ffffff !important;
+}
+
+/* 無効化された撮影ボタンも、灰色地に灰色文字にならないよう可読性を固定。 */
+.stApp .block-container button:disabled,
+.stApp .block-container button:disabled * {
+    background: #d9d9d9 !important;
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+    border-color: #d9d9d9 !important;
+    opacity: 1 !important;
+}
+
 [data-testid="stCameraInput"] p,
 [data-testid="stCameraInput"] span,
 [data-testid="stFileUploader"] p,

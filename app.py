@@ -39,35 +39,151 @@ C_SQUARES = {(0, 1), (1, 0), (0, 6), (1, 7), (6, 0), (7, 1), (6, 7), (7, 6)}
 
 st.markdown("""
 <style>
+:root {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --surface-soft: #eef4ff;
+    --border: #cfd8e6;
+    --text: #1f2937;
+    --muted: #5b6474;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --accent: #f59e0b;
+}
+
+html, body, [class*="css"] {
+    color: var(--text);
+}
+
+.stApp {
+    background: linear-gradient(180deg, #f7faff 0%, #eef4fb 100%);
+    color: var(--text);
+}
+
 /* Streamlit の固定ツールバーに本文が潜り込まないよう、上側に余白を確保する。 */
 .block-container {
     max-width: 760px;
     padding-top: 4.25rem !important;
     padding-bottom: 4rem;
 }
+
 .big-title {
     text-align:center;
     font-size:2rem;
     font-weight:800;
     line-height:1.25;
     margin:.35rem 0 .25rem;
+    color: var(--text);
 }
-.sub {text-align:center; color:#777; margin-bottom:1.35rem; line-height:1.55;}
+.sub {
+    text-align:center;
+    color: var(--muted);
+    margin-bottom:1.35rem;
+    line-height:1.55;
+}
+.small-note {font-size:.88rem; color:var(--muted);}
+
+/* カード類 */
+.result-card,
+.lesson-head,
+[data-testid="stCameraInput"],
+[data-testid="stFileUploader"],
+[data-testid="stExpander"] {
+    border:1px solid var(--border) !important;
+    border-radius:18px !important;
+    background: var(--surface) !important;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.06);
+}
+
 .result-card {
-    border:2px solid rgba(128,128,128,.55);
-    border-radius:18px;
     padding:16px;
     margin:10px 0;
-    background:rgba(255,255,255,.06);
 }
-.result-main {font-size:1.45rem; font-weight:800; text-align:center;}
-.kid-text {font-size:1.15rem; line-height:1.7; text-align:center;}
-.small-note {font-size:.88rem; color:#777;}
-div.stButton > button {border-radius:14px; min-height:50px; font-weight:700;}
+.result-main {font-size:1.45rem; font-weight:800; text-align:center; color:var(--text);}
+.kid-text {font-size:1.15rem; line-height:1.7; text-align:center; color:var(--text);}
+
+/* ボタン */
+div.stButton > button,
+[data-testid="baseButton-secondary"],
+[data-testid="baseButton-primary"] {
+    border-radius:14px !important;
+    min-height:50px;
+    font-weight:700;
+    border: 1px solid #bfd1ff !important;
+    background: linear-gradient(180deg, #4f8dfd 0%, #2563eb 100%) !important;
+    color: white !important;
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.22);
+}
+
+div.stButton > button:hover,
+[data-testid="baseButton-secondary"]:hover,
+[data-testid="baseButton-primary"]:hover {
+    background: linear-gradient(180deg, #3d7ef6 0%, #1d4ed8 100%) !important;
+    border-color: #94b4ff !important;
+}
+
+/* expander 見出し */
+details {
+    background: transparent;
+}
+summary {
+    border-radius: 18px;
+}
+[data-testid="stExpander"] summary {
+    background: var(--surface-soft) !important;
+    border-radius: 18px !important;
+    color: var(--text) !important;
+}
+
+/* 入力ラベルと通常テキスト */
+label, p, li, h1, h2, h3, h4, h5, h6, span, div {
+    color: inherit;
+}
 
 /* 子どもが使う主要操作は少し大きめにする。 */
-[data-testid="stCameraInput"] {margin-top:.35rem;}
-[data-testid="stFileUploader"] {margin-top:.25rem;}
+[data-testid="stCameraInput"] {margin-top:.35rem; padding: .75rem;}
+[data-testid="stFileUploader"] {margin-top:.25rem; padding: .75rem;}
+
+/* selectbox / radio など */
+[data-baseweb="select"] > div,
+[data-testid="stRadio"] > div,
+[data-testid="stHorizontalBlock"] > div,
+[data-testid="stTextInput"] input {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+}
+
+.lesson-head {
+    padding:16px 16px 12px;
+    margin:.4rem 0 1rem;
+}
+.lesson-stage {font-size:.9rem; color:var(--primary-dark); font-weight:700; margin-bottom:.25rem;}
+.lesson-title {font-size:1.45rem; font-weight:800; line-height:1.35; color:var(--text);}
+.lesson-goal {font-size:1.02rem; line-height:1.65; margin-top:.65rem; color:var(--text);}
+.lesson-point {
+    border-left:5px solid var(--accent);
+    padding:.7rem .9rem;
+    margin:.7rem 0;
+    border-radius:12px;
+    background:#fff7e7;
+    font-size:1.08rem;
+    line-height:1.7;
+    color:var(--text);
+}
+.lesson-seq {
+    font-size:1.12rem;
+    font-weight:800;
+    text-align:center;
+    padding:.7rem;
+    border-radius:12px;
+    background:#e8f0ff;
+    margin:.65rem 0;
+    color:var(--text);
+}
+
+hr {
+    border-color: #d9e2f2;
+}
 
 @media (max-width: 768px) {
     .block-container {
@@ -87,34 +203,6 @@ div.stButton > button {border-radius:14px; min-height:50px; font-weight:700;}
         min-height:54px;
         font-size:1.02rem;
     }
-}
-.lesson-head {
-    border:1px solid rgba(128,128,128,.35);
-    border-radius:18px;
-    padding:16px 16px 12px;
-    margin:.4rem 0 1rem;
-    background:rgba(255,255,255,.04);
-}
-.lesson-stage {font-size:.9rem; color:#777; font-weight:700; margin-bottom:.25rem;}
-.lesson-title {font-size:1.45rem; font-weight:800; line-height:1.35;}
-.lesson-goal {font-size:1.02rem; line-height:1.65; margin-top:.65rem;}
-.lesson-point {
-    border-left:5px solid #f2c94c;
-    padding:.7rem .9rem;
-    margin:.7rem 0;
-    border-radius:8px;
-    background:rgba(242,201,76,.08);
-    font-size:1.08rem;
-    line-height:1.7;
-}
-.lesson-seq {
-    font-size:1.12rem;
-    font-weight:800;
-    text-align:center;
-    padding:.7rem;
-    border-radius:12px;
-    background:rgba(128,128,128,.10);
-    margin:.65rem 0;
 }
 </style>
 """, unsafe_allow_html=True)

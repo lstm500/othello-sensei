@@ -1,5 +1,6 @@
 import math
 import json
+from io import BytesIO
 from functools import lru_cache
 
 import cv2
@@ -423,6 +424,81 @@ hr { border-color: #d8ddd7; }
     font-size:.9rem;
     margin:.2rem 0 .7rem;
 }
+
+
+/* 挑戦モード：盤面そのものをタップする8×8グリッド */
+[class*="st-key-challenge_board_grid_"] {
+    background: #176c3b;
+    border: 3px solid #0e4f2a;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 10px 24px rgba(17,17,17,.12);
+    margin: .55rem 0 .75rem;
+}
+[class*="st-key-challenge_board_grid_"] [data-testid="stHorizontalBlock"] {
+    gap: 0 !important;
+}
+[class*="st-key-challenge_board_grid_"] [data-testid="stColumn"] {
+    padding: 0 !important;
+    min-width: 0 !important;
+}
+[class*="st-key-challenge_board_grid_"] [data-testid="stButton"] {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+[class*="st-key-challenge_board_grid_"] button,
+[class*="st-key-challenge_board_grid_"] button:disabled {
+    width: 100% !important;
+    aspect-ratio: 1 / 1 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border: 1px solid #0f512d !important;
+    background: #23844d !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    font-size: clamp(1.2rem, 6vw, 2.45rem) !important;
+    line-height: 1 !important;
+}
+/* 石は絵文字で表示。空きマスは文字なし。 */
+[class*="st-key-challenge_board_grid_"] button:disabled,
+[class*="st-key-challenge_board_grid_"] button:disabled * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+/* 候補マスだけ有効。黄色い小さい点を表示する。セル全体はタップ可能。 */
+[class*="st-key-challenge_board_grid_"] button:not(:disabled),
+[class*="st-key-challenge_board_grid_"] button:not(:disabled) * {
+    background: #23844d !important;
+    color: #f6db45 !important;
+    -webkit-text-fill-color: #f6db45 !important;
+    font-size: clamp(.9rem, 3.6vw, 1.45rem) !important;
+    font-weight: 900 !important;
+    border-color: #0f512d !important;
+}
+[class*="st-key-challenge_board_grid_"] button:not(:disabled):hover,
+[class*="st-key-challenge_board_grid_"] button:not(:disabled):focus {
+    background: #2b9559 !important;
+    box-shadow: inset 0 0 0 3px rgba(246,219,69,.45) !important;
+}
+.challenge-instruction {
+    text-align: center;
+    font-weight: 850;
+    color: #111111;
+    margin: .2rem 0 .55rem;
+}
+.branch-card {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: .9rem 1rem;
+    margin: .75rem 0;
+    background: #ffffff;
+    line-height: 1.7;
+    color: #111111;
+}
+.branch-card strong { color: var(--green-dark); }
 
 @media (max-width: 768px) {
     .block-container {
@@ -1431,6 +1507,147 @@ def move_buttons(moves, key_prefix, step=0):
     return clicked
 
 
+def challenge_candidate_moves(board, player, level):
+    """挑戦では全合法手を見せず、比較学習に向く3〜4候補だけを出す。"""
+    moves = legal_moves(board, player)
+    if not moves:
+        return []
+    best, _flips, meta = best_move_training(board, player)
+    ranked = meta["all"] if meta else []
+    target_n = 3 if level <= 2 else 4
+    target_n = min(target_n, len(ranked))
+    if len(ranked) <= target_n:
+        return [m for _score, m, _f, _child in ranked]
+
+    # 最善手に加え、近い候補・中間候補・差が出る候補を混ぜる。
+    indices = [0]
+    if target_n >= 4 and len(ranked) > 1:
+        indices.append(1)
+    indices.extend([len(ranked) // 2, len(ranked) - 1])
+
+    picked = []
+    for idx in indices:
+        move = ranked[idx][1]
+        if move not in picked:
+            picked.append(move)
+        if len(picked) >= target_n:
+            break
+    for _score, move, _f, _child in ranked:
+        if move not in picked:
+            picked.append(move)
+        if len(picked) >= target_n:
+            break
+    # 盤上の並びは位置順にして、ランキング順を見せない。
+    return sorted(picked, key=lambda m: (m[0], m[1]))
+
+
+def clickable_challenge_board(board, candidates, key_suffix):
+    """8×8盤面そのものをタップするUI。黄色い点のマスだけクリック可能。"""
+    candidate_set = set(candidates)
+    clicked = None
+    with st.container(key=f"challenge_board_grid_{key_suffix}"):
+        for r in range(8):
+            cols = st.columns(8, gap=None)
+            for c in range(8):
+                move = (r, c)
+                if board[r, c] == BLACK:
+                    label = "⚫"
+                    disabled = True
+                elif board[r, c] == WHITE:
+                    label = "⚪"
+                    disabled = True
+                elif move in candidate_set:
+                    label = "•"
+                    disabled = False
+                else:
+                    label = "\u00a0"
+                    disabled = True
+                if cols[c].button(
+                    label,
+                    key=f"challenge_cell_{key_suffix}_{r}_{c}",
+                    disabled=disabled,
+                    use_container_width=True,
+                    help=f"{coord(move)}" if move in candidate_set else None,
+                ):
+                    clicked = move
+    return clicked
+
+
+def _append_animation_frame(frames, durations, board, duration, recommended=None, size=560):
+    frames.append(render_board(board, recommended=recommended, size=size).convert("RGB"))
+    durations.append(int(duration))
+
+
+def make_turn_animation(board, player, move, flips, reply_move=None, reply_flips=None, size=560):
+    """自分の着手→反転→相手の着手→反転を、ゆっくりしたGIFにする。"""
+    frames, durations = [], []
+    working = board.copy()
+
+    _append_animation_frame(frames, durations, working, 900, recommended=move, size=size)
+    working[move[0], move[1]] = player
+    _append_animation_frame(frames, durations, working, 650, size=size)
+    for rr, cc in flips:
+        working[rr, cc] = player
+        _append_animation_frame(frames, durations, working, 320, size=size)
+    _append_animation_frame(frames, durations, working, 900, size=size)
+
+    if reply_move is not None:
+        _append_animation_frame(frames, durations, working, 850, recommended=reply_move, size=size)
+        opp = -player
+        working[reply_move[0], reply_move[1]] = opp
+        _append_animation_frame(frames, durations, working, 650, size=size)
+        for rr, cc in (reply_flips or []):
+            working[rr, cc] = opp
+            _append_animation_frame(frames, durations, working, 320, size=size)
+        _append_animation_frame(frames, durations, working, 1200, size=size)
+    else:
+        _append_animation_frame(frames, durations, working, 1400, size=size)
+
+    out = BytesIO()
+    frames[0].save(
+        out,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=durations,
+        loop=0,
+        optimize=True,
+        disposal=2,
+    )
+    return out.getvalue()
+
+
+def best_reply_for(board_after, opponent):
+    moves = legal_moves(board_after, opponent)
+    if not moves:
+        return None, [], None, "あいては おけるところがないので、パスになるよ。"
+    move, flips, meta = best_move_training(board_after, opponent)
+    reason = explain_move(board_after, opponent, move, flips, meta)
+    return move, flips, meta, reason
+
+
+def compare_choice_for_child(board, player, chosen, best):
+    """○×ではなく、なぜ別の手も比べたいのかを6歳向けに1点だけ説明する。"""
+    chosen_flips = flips_for_move(board, player, chosen[0], chosen[1])
+    best_flips = flips_for_move(board, player, best[0], best[1])
+    chosen_after = apply_move(board, player, chosen, chosen_flips)
+    best_after = apply_move(board, player, best, best_flips)
+    chosen_opp = legal_moves(chosen_after, -player)
+    best_opp = legal_moves(best_after, -player)
+
+    if best in CORNERS and chosen not in CORNERS:
+        return "もうひとつ、かどにおける手も見てみよう。かどはあとからひっくり返されないよ。"
+    chosen_gives_corner = any(m in CORNERS for m in chosen_opp)
+    best_gives_corner = any(m in CORNERS for m in best_opp)
+    if chosen_gives_corner and not best_gives_corner:
+        return "今の手だと、あいてが かどをねらえる形になるよ。かどをわたしにくい手も見てみよう。"
+    if len(best_opp) + 1 < len(chosen_opp):
+        return f"こっちの手なら、あいてがおける場所を {len(chosen_opp)}こから {len(best_opp)}こにへらせるよ。"
+    if len(best_flips) < len(chosen_flips):
+        return "いまはたくさん取るより、少なく取って次を動きやすくする手も強いよ。"
+    return "今の手も動けるけれど、次の相手の手まで見ると、もうひとつ比べたい手があるよ。"
+
+
 def reset_experiment(level=None, variant=None):
     if level is None:
         level = st.session_state.get("experiment_level", 2)
@@ -1925,10 +2142,11 @@ elif st.session_state.page == "challenge":
 
     level = st.session_state.challenge_level
     st.markdown("### 🎯 どこに打つ？")
-    st.caption("正解なら次のレベルへ。不正解なら1段やさしい盤面へ戻って、同じ考え方をもう一度練習します。")
+    st.caption("黄色い点のどれかを、オセロ盤の上で直接タップしてください。")
     st.markdown(render_level_meter(level), unsafe_allow_html=True)
     st.markdown(
-        f'<div class="challenge-card"><div class="mode-title">{PRACTICE_LEVELS[level]["name"]}</div><div class="mode-text">{PRACTICE_LEVELS[level]["hint"]}</div></div>',
+        f'<div class="challenge-card"><div class="mode-title">{PRACTICE_LEVELS[level]["name"]}</div>'
+        f'<div class="mode-text">{PRACTICE_LEVELS[level]["hint"]}</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -1937,33 +2155,92 @@ elif st.session_state.page == "challenge":
     player_name = "くろ" if player == BLACK else "しろ"
     moves = legal_moves(board, player)
 
+    # 旧バージョンの挑戦結果がセッションに残っていても、新形式へ安全に移行する。
+    if st.session_state.challenge_feedback is not None:
+        required_feedback_keys = {
+            "same_group", "chosen", "chosen_flips", "reply_move", "reply_flips",
+            "best", "best_flips", "best_reply_move", "best_reply_flips",
+            "coaching", "compare_note", "audio_text", "next_level",
+        }
+        if not required_feedback_keys.issubset(set(st.session_state.challenge_feedback.keys())):
+            st.session_state.challenge_feedback = None
+
     if st.session_state.challenge_feedback is None:
         st.markdown(f'<span class="turn-badge">{player_name} の番</span>', unsafe_allow_html=True)
-        show_legal = level <= 3
-        st.image(render_board(board, legal=list(moves.keys()) if show_legal else None), use_container_width=True)
-        if show_legal:
-            st.caption("黄色い点がおける場所。いちばんよいと思う手を選んでください。")
-        else:
-            st.caption("レベル4・5は黄色いヒントなし。座標ボタンから考えて選んでください。")
+        candidates = challenge_candidate_moves(board, player, level)
+        st.markdown('<div class="challenge-instruction">黄色い点をタップしてね</div>', unsafe_allow_html=True)
+        chosen = clickable_challenge_board(
+            board,
+            candidates,
+            f"{st.session_state.challenge_variant}_{level}",
+        )
+        st.caption(f"今回は {len(candidates)}この候補だけを比べます。どのマスでも、タップできるのは黄色い点だけです。")
 
-        chosen = move_buttons(moves, "challenge_move", st.session_state.challenge_variant)
         if chosen is not None:
-            with st.spinner("答えを確かめています…"):
+            with st.spinner("この先を考えています…"):
                 best, best_flips, meta = best_move_training(board, player)
                 top_score = meta["all"][0][0]
                 accepted = {m for score, m, _f, _child in meta["all"] if abs(score - top_score) < 1e-9}
-                correct = chosen in accepted
-                reason = explain_move(board, player, best, best_flips, meta)
+                same_group = chosen in accepted
+
+                chosen_flips = moves[chosen]
+                chosen_after = apply_move(board, player, chosen, chosen_flips)
+                reply_move, reply_flips, _reply_meta, reply_reason = best_reply_for(chosen_after, -player)
+                chosen_summary = move_quality_summary(board, player, chosen)
+
+                # AIが比較した手の分岐も用意する。最善群なら選択した手をそのまま深掘りする。
+                best_after = apply_move(board, player, best, best_flips)
+                best_reply_move, best_reply_flips, _best_reply_meta, best_reply_reason = best_reply_for(best_after, -player)
+
                 st.session_state.challenge_total += 1
-                if correct:
+                if same_group:
                     st.session_state.challenge_correct += 1
-                next_level = min(5, level + 1) if correct else max(1, level - 1)
+                next_level = min(5, level + 1) if same_group else max(1, level - 1)
+
+                if same_group:
+                    if reply_move is None:
+                        coaching = (
+                            f"今タップした {coord(chosen)} におくと、{chosen_summary} "
+                            "そのあと、あいてはおける場所がなくてパスになるよ。"
+                        )
+                    else:
+                        coaching = (
+                            f"今タップした {coord(chosen)} におくと、{chosen_summary} "
+                            f"つぎに、あいては {coord(reply_move)} を考えるよ。{reply_reason}"
+                        )
+                    compare_note = "せんせいAIも、この手を強い候補として考えるよ。アニメーションで『自分→あいて』の順を見てみよう。"
+                    audio_text = coaching + compare_note
+                else:
+                    if reply_move is None:
+                        chosen_reply_text = "そのあと、あいてはおける場所がなくてパスになるよ。"
+                    else:
+                        chosen_reply_text = f"そのあと、あいては {coord(reply_move)} においてくるよ。{reply_reason}"
+                    compare_reason = compare_choice_for_child(board, player, chosen, best)
+                    if best_reply_move is None:
+                        best_reply_text = "そうすると、あいてはおける場所がなくてパスになるよ。"
+                    else:
+                        best_reply_text = f"そうすると、あいては {coord(best_reply_move)} を考えるよ。{best_reply_reason}"
+                    coaching = (
+                        f"今タップした {coord(chosen)} におくと、{chosen_summary} {chosen_reply_text}"
+                    )
+                    compare_note = (
+                        f"{compare_reason} せんせいAIなら {coord(best)} も比べるよ。{best_reply_text}"
+                    )
+                    audio_text = coaching + compare_note
+
                 st.session_state.challenge_feedback = {
-                    "correct": correct,
-                    "chosen": coord(chosen),
-                    "best": coord(best),
-                    "reason": reason,
-                    "chosen_summary": move_quality_summary(board, player, chosen),
+                    "same_group": same_group,
+                    "chosen": chosen,
+                    "chosen_flips": chosen_flips,
+                    "reply_move": reply_move,
+                    "reply_flips": reply_flips,
+                    "best": best,
+                    "best_flips": best_flips,
+                    "best_reply_move": best_reply_move,
+                    "best_reply_flips": best_reply_flips,
+                    "coaching": coaching,
+                    "compare_note": compare_note,
+                    "audio_text": audio_text,
                     "next_level": next_level,
                 }
                 st.session_state.challenge_selected = chosen
@@ -1972,25 +2249,59 @@ elif st.session_state.page == "challenge":
             st.rerun()
     else:
         fb = st.session_state.challenge_feedback
-        st.image(render_board(board, recommended=st.session_state.challenge_best), use_container_width=True)
-        if fb["correct"]:
+
+        st.markdown("#### ① 今タップした手から、相手まで見てみよう")
+        chosen_gif = make_turn_animation(
+            board,
+            player,
+            fb["chosen"],
+            fb["chosen_flips"],
+            fb["reply_move"],
+            fb["reply_flips"],
+        )
+        st.image(chosen_gif, use_container_width=True)
+        st.markdown(
+            f'<div class="branch-card"><strong>この手から考えると</strong><br>{fb["coaching"]}</div>',
+            unsafe_allow_html=True,
+        )
+
+        if not fb["same_group"]:
+            st.markdown("#### ② もう1つの手もくらべてみよう")
+            best_gif = make_turn_animation(
+                board,
+                player,
+                fb["best"],
+                fb["best_flips"],
+                fb["best_reply_move"],
+                fb["best_reply_flips"],
+            )
+            st.image(best_gif, use_container_width=True)
             st.markdown(
-                f'<div class="feedback-good"><b>せいかい！ {fb["chosen"]}</b><br>{fb["reason"]}<br>つぎはレベル {fb["next_level"]}。</div>',
+                f'<div class="branch-card"><strong>せんせいAIは、こっちも考えるよ</strong><br>{fb["compare_note"]}</div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                f'<div class="feedback-bad"><b>今回は {fb["chosen"]}。AIのおすすめは {fb["best"]}</b><br>{fb["chosen_summary"]}<br><br><b>おすすめ手の理由：</b>{fb["reason"]}<br>つぎはレベル {fb["next_level"]} のやさしい盤面で確認しよう。</div>',
+                f'<div class="feedback-good">{fb["compare_note"]}</div>',
                 unsafe_allow_html=True,
             )
-        if st.button(f"つぎの問題へ　レベル {fb['next_level']}", use_container_width=True, type="primary"):
+
+        speech_controls(
+            fb["audio_text"],
+            play_label="🔊 この流れを音声で聞く",
+            rate=0.82,
+            height=68,
+        )
+        st.caption("アニメーションは何度でも繰り返します。黄色い輪が次に置く場所です。")
+
+        if st.button("つぎの盤面へ", use_container_width=True, type="primary"):
             new_level = fb["next_level"]
             st.session_state.challenge_level = new_level
             st.session_state.challenge_variant += 1
             new_challenge(new_level, st.session_state.challenge_variant)
             st.rerun()
 
-    st.caption(f"これまで：{st.session_state.challenge_correct} / {st.session_state.challenge_total} 正解")
+    st.caption(f"これまで {st.session_state.challenge_total}もん 挑戦したよ")
     with st.expander("レベルを選び直す", expanded=False):
         manual_level = st.selectbox(
             "開始レベル",

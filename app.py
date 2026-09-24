@@ -40,38 +40,31 @@ C_SQUARES = {(0, 1), (1, 0), (0, 6), (1, 7), (6, 0), (7, 1), (6, 7), (7, 6)}
 st.markdown("""
 <style>
 :root {
-    --bg-top: #0f172a;
-    --bg-bottom: #151f32;
-    --surface: #1b2538;
-    --surface-2: #24324a;
-    --surface-3: #2c3d59;
-    --border: rgba(255,255,255,.10);
-    --text: #eef2ff;
-    --muted: #b9c5dd;
-    --gold-1: #ffd27a;
-    --gold-2: #f3b64c;
-    --gold-text: #2a1a00;
-    --teal: #57d3c6;
-    --shadow: 0 18px 42px rgba(0,0,0,.26);
+    --bg: #090909;
+    --surface: #141414;
+    --surface-2: #1c1c1c;
+    --surface-3: #242424;
+    --border: #353535;
+    --text: #ffffff;
+    --muted: #bdbdbd;
+    --button: #ffffff;
+    --button-text: #111111;
+    --green: #32c26b;
+    --green-soft: rgba(50,194,107,.14);
+    --green-border: rgba(50,194,107,.48);
+    --shadow: 0 14px 34px rgba(0,0,0,.36);
 }
 
-html, body, [class*="css"] {
-    color: var(--text);
-}
+html, body, [class*="css"] { color: var(--text); }
 
 .stApp {
     color: var(--text);
     background:
-        radial-gradient(circle at top left, rgba(87, 211, 198, .10), transparent 26%),
-        radial-gradient(circle at top right, rgba(255, 210, 122, .10), transparent 24%),
-        linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+        radial-gradient(circle at 50% -10%, rgba(50,194,107,.08), transparent 30%),
+        var(--bg);
 }
+section.main > div { background: transparent; }
 
-section.main > div {
-    background: transparent;
-}
-
-/* Streamlit の固定ツールバーに本文が潜り込まないよう、上側に余白を確保する。 */
 .block-container {
     max-width: 760px;
     padding-top: 4.25rem !important;
@@ -81,22 +74,28 @@ section.main > div {
 .hero-panel {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(255,255,255,.10);
+    border: 1px solid var(--border);
     border-radius: 24px;
     padding: 1.2rem 1rem 1.15rem;
     margin-bottom: 1.2rem;
-    background:
-        radial-gradient(circle at 15% 15%, rgba(87,211,198,.14), transparent 28%),
-        radial-gradient(circle at 85% 18%, rgba(255,210,122,.12), transparent 24%),
-        linear-gradient(180deg, rgba(36,50,74,.96) 0%, rgba(27,37,56,.98) 100%);
+    background: linear-gradient(180deg, #181818 0%, #101010 100%);
     box-shadow: var(--shadow);
+}
+.hero-panel::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: var(--green);
 }
 .hero-kicker {
     text-align: center;
     font-size: .72rem;
     font-weight: 800;
     letter-spacing: .18em;
-    color: var(--gold-1);
+    color: var(--green);
     margin-bottom: .45rem;
 }
 .big-title {
@@ -121,9 +120,9 @@ section.main > div {
     justify-content:center;
 }
 .hero-chip {
-    background: rgba(255,255,255,.07);
-    border: 1px solid rgba(255,255,255,.10);
-    color: var(--text);
+    background: #202020;
+    border: 1px solid #373737;
+    color: #ffffff;
     padding: .42rem .7rem;
     border-radius: 999px;
     font-size: .88rem;
@@ -131,7 +130,6 @@ section.main > div {
 }
 
 .small-note {font-size:.88rem; color:var(--muted);}
-
 h3 {
     color: var(--text) !important;
     font-size: 1.65rem !important;
@@ -139,7 +137,6 @@ h3 {
     margin-bottom: .25rem !important;
 }
 
-/* カード類 */
 .result-card,
 .lesson-head,
 [data-testid="stCameraInput"],
@@ -147,150 +144,128 @@ h3 {
 [data-testid="stExpander"] {
     border:1px solid var(--border) !important;
     border-radius:20px !important;
-    background: linear-gradient(180deg, rgba(44,61,89,.98) 0%, rgba(27,37,56,.98) 100%) !important;
+    background: var(--surface) !important;
     box-shadow: var(--shadow);
 }
-
-.result-card {
-    padding:16px;
-    margin:10px 0;
-}
-.result-main {font-size:1.45rem; font-weight:900; text-align:center; color:var(--gold-1);}
+.result-card { padding:16px; margin:10px 0; }
+.result-main {font-size:1.45rem; font-weight:900; text-align:center; color:var(--green);}
 .kid-text {font-size:1.15rem; line-height:1.7; text-align:center; color:var(--text);}
 
-/* ボタン */
+/* ボタンは白地＋黒文字で統一。緑は枠・フォーカス・状態表示に限定。 */
 div.stButton > button,
 [data-testid="baseButton-secondary"],
 [data-testid="baseButton-primary"] {
     border-radius:16px !important;
     min-height:54px;
-    font-weight:800;
+    font-weight:850;
     letter-spacing:.01em;
-    border: 1px solid rgba(255,210,122,.35) !important;
-    background: linear-gradient(180deg, var(--gold-1) 0%, var(--gold-2) 100%) !important;
-    color: var(--gold-text) !important;
-    box-shadow: 0 10px 24px rgba(243, 182, 76, 0.22);
+    border: 1px solid #ffffff !important;
+    background: #ffffff !important;
+    color: var(--button-text) !important;
+    box-shadow: 0 8px 20px rgba(0,0,0,.26);
 }
-
 div.stButton > button:hover,
 [data-testid="baseButton-secondary"]:hover,
 [data-testid="baseButton-primary"]:hover {
-    background: linear-gradient(180deg, #ffd98f 0%, #efad36 100%) !important;
-    border-color: rgba(255,227,169,.55) !important;
+    background: #f1f1f1 !important;
+    border-color: var(--green) !important;
 }
-
 div.stButton > button:focus,
 [data-testid="baseButton-secondary"]:focus,
 [data-testid="baseButton-primary"]:focus {
-    box-shadow: 0 0 0 3px rgba(87, 211, 198, .28), 0 10px 24px rgba(243, 182, 76, 0.22) !important;
+    box-shadow: 0 0 0 3px rgba(50,194,107,.28), 0 8px 20px rgba(0,0,0,.26) !important;
 }
 
-/* Camera/expander areas */
 [data-testid="stCameraInput"] {margin-top:.35rem; padding: .85rem;}
 [data-testid="stFileUploader"] {margin-top:.25rem; padding: .85rem;}
-[data-testid="stExpander"] {
-    padding: .35rem .5rem;
-}
+[data-testid="stExpander"] { padding: .35rem .5rem; }
 [data-testid="stExpander"] summary {
-    background: linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,.03) 100%) !important;
+    background: #181818 !important;
     border-radius: 16px !important;
     color: var(--text) !important;
 }
 
-/* captions / labels: Streamlit標準の薄い文字が背景に沈まないよう明示する */
+/* Streamlit標準の文字色を明示して見切れ・同化を防ぐ */
 .stApp [data-testid="stMarkdownContainer"],
 .stApp [data-testid="stMarkdownContainer"] p,
 .stApp [data-testid="stMarkdownContainer"] li,
 .stApp [data-testid="stWidgetLabel"],
 .stApp [data-testid="stWidgetLabel"] p,
 .stApp label,
-.stApp small {
-    color: var(--text) !important;
-}
-[data-testid="stCaptionContainer"],
-[data-testid="stCaptionContainer"] p {
-    color: var(--muted) !important;
-}
+.stApp small,
 [data-testid="stExpander"] summary,
 [data-testid="stExpander"] summary p,
 [data-testid="stExpander"] summary span {
     color: var(--text) !important;
 }
+[data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] p { color: var(--muted) !important; }
 
-/* gold button text must stay dark even when markdown/text rules are applied */
+/* 白ボタン内は必ず黒文字 */
 div.stButton > button,
 div.stButton > button p,
 div.stButton > button span,
 [data-testid="baseButton-secondary"],
 [data-testid="baseButton-secondary"] p,
+[data-testid="baseButton-secondary"] span,
 [data-testid="baseButton-primary"],
-[data-testid="baseButton-primary"] p {
-    color: var(--gold-text) !important;
+[data-testid="baseButton-primary"] p,
+[data-testid="baseButton-primary"] span,
+[data-testid="stCameraInput"] button,
+[data-testid="stCameraInput"] button p,
+[data-testid="stFileUploader"] button,
+[data-testid="stFileUploader"] button p {
+    color: var(--button-text) !important;
 }
 
-/* camera/file uploader内の文字 */
 [data-testid="stCameraInput"] p,
 [data-testid="stCameraInput"] span,
 [data-testid="stFileUploader"] p,
-[data-testid="stFileUploader"] span {
-    color: var(--text) !important;
-}
-[data-testid="stCameraInput"] button,
-[data-testid="stFileUploader"] button {
-    color: var(--gold-text) !important;
-}
+[data-testid="stFileUploader"] span { color: var(--text) !important; }
 
-/* selectbox / radio / input など */
+/* selectbox / radio / input */
 [data-baseweb="select"] > div,
 [data-testid="stRadio"] > div,
 [data-testid="stTextInput"] input {
     background: var(--surface-2) !important;
     color: var(--text) !important;
-    border: 1px solid rgba(255,255,255,.14) !important;
+    border: 1px solid #3a3a3a !important;
     border-radius: 14px !important;
 }
 [data-baseweb="select"] span,
 [data-testid="stRadio"] label,
 [data-testid="stRadio"] p,
-[data-testid="stTextInput"] input {
-    color: var(--text) !important;
+[data-testid="stTextInput"] input { color: var(--text) !important; }
+[role="listbox"], [role="option"] {
+    background: #1c1c1c !important;
+    color: #ffffff !important;
 }
-[role="listbox"],
-[role="option"] {
-    background: #24324a !important;
-    color: #eef2ff !important;
-}
-[role="option"]:hover {
-    background: #314462 !important;
-}
+[role="option"]:hover { background: #292929 !important; }
 
 .mode-card,
 .think-card,
 .challenge-card {
-    border: 1px solid rgba(255,255,255,.11);
+    border: 1px solid var(--border);
     border-radius: 20px;
     padding: 1rem;
     margin: .65rem 0;
-    background: linear-gradient(180deg, rgba(44,61,89,.96) 0%, rgba(27,37,56,.98) 100%);
+    background: linear-gradient(180deg, #171717 0%, #111111 100%);
     box-shadow: var(--shadow);
 }
 .mode-title {
-    color: var(--gold-1);
+    color: var(--green);
     font-size: 1.15rem;
     font-weight: 900;
     margin-bottom: .3rem;
 }
-.mode-text {
-    color: var(--muted);
-    line-height: 1.6;
-}
+.mode-text { color: var(--muted); line-height: 1.6; }
 .turn-badge {
     display:inline-block;
     border-radius:999px;
     padding:.35rem .65rem;
-    background:rgba(87,211,198,.13);
-    border:1px solid rgba(87,211,198,.25);
-    color:#b9fff7;
+    background:var(--green-soft);
+    border:1px solid var(--green-border);
+    color:#bff2d2;
     font-weight:800;
     margin:.2rem 0 .65rem;
 }
@@ -301,15 +276,15 @@ div.stButton > button span,
     padding: .9rem 1rem;
     margin:.7rem 0;
     line-height:1.65;
-    border:1px solid rgba(255,255,255,.10);
+    border:1px solid var(--border);
     color: var(--text);
 }
-.feedback-good {background:rgba(52,211,153,.12); border-color:rgba(52,211,153,.28);}
-.feedback-bad {background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.28);}
-.feedback-neutral {background:rgba(255,210,122,.10); border-color:rgba(255,210,122,.22);}
-.feedback-good b {color:#a7f3d0;}
-.feedback-bad b {color:#fecaca;}
-.feedback-neutral b {color:#ffe1a6;}
+.feedback-good {background:rgba(50,194,107,.11); border-color:var(--green-border);}
+.feedback-bad {background:#1b1b1b; border-color:#555;}
+.feedback-neutral {background:#181818; border-color:#3f3f3f;}
+.feedback-good b {color:#83e6aa;}
+.feedback-bad b {color:#ffffff;}
+.feedback-neutral b {color:#ffffff;}
 .level-meter {
     display:flex;
     gap:.35rem;
@@ -320,38 +295,29 @@ div.stButton > button span,
     width:28px;
     height:8px;
     border-radius:99px;
-    background:rgba(255,255,255,.12);
+    background:#343434;
 }
-.level-dot.on {
-    background:linear-gradient(90deg, var(--teal), var(--gold-1));
-}
+.level-dot.on { background:var(--green); }
 
 [data-testid="stAlert"] {
-    background: rgba(36,50,74,.96) !important;
-    border: 1px solid rgba(255,255,255,.12) !important;
+    background: #161616 !important;
+    border: 1px solid #3b3b3b !important;
     color: var(--text) !important;
 }
-[data-testid="stAlert"] * {
-    color: var(--text) !important;
-}
+[data-testid="stAlert"] * { color: var(--text) !important; }
 [data-testid="stProgress"] p,
-[data-testid="stProgress"] span {
-    color: var(--text) !important;
-}
+[data-testid="stProgress"] span { color: var(--text) !important; }
 
-.lesson-head {
-    padding:16px 16px 12px;
-    margin:.4rem 0 1rem;
-}
-.lesson-stage {font-size:.9rem; color:var(--teal); font-weight:800; margin-bottom:.25rem;}
+.lesson-head { padding:16px 16px 12px; margin:.4rem 0 1rem; }
+.lesson-stage {font-size:.9rem; color:var(--green); font-weight:800; margin-bottom:.25rem;}
 .lesson-title {font-size:1.45rem; font-weight:900; line-height:1.35; color:var(--text);}
 .lesson-goal {font-size:1.02rem; line-height:1.65; margin-top:.65rem; color:var(--text);}
 .lesson-point {
-    border-left:5px solid var(--gold-1);
+    border-left:5px solid var(--green);
     padding:.8rem .95rem;
     margin:.8rem 0;
     border-radius:14px;
-    background: rgba(255, 210, 122, .10);
+    background: var(--green-soft);
     font-size:1.08rem;
     line-height:1.7;
     color:var(--text);
@@ -362,19 +328,17 @@ div.stButton > button span,
     text-align:center;
     padding:.8rem;
     border-radius:14px;
-    background: rgba(87, 211, 198, .14);
-    border: 1px solid rgba(87, 211, 198, .18);
+    background: #202020;
+    border: 1px solid #393939;
+    border-bottom: 3px solid var(--green);
     margin:.65rem 0;
     color:var(--text);
 }
 
-hr {
-    border-color: rgba(255,255,255,.10);
-}
-
+hr { border-color: #323232; }
 [data-testid="stImage"] img {
     border-radius: 18px;
-    border: 1px solid rgba(255,255,255,.10);
+    border: 1px solid #383838;
     box-shadow: var(--shadow);
 }
 
@@ -384,29 +348,12 @@ hr {
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
-    .hero-panel {
-        padding: 1rem .85rem 1rem;
-        border-radius: 22px;
-    }
-    .big-title {
-        font-size:1.82rem;
-        margin-top:.2rem;
-    }
-    .sub {
-        font-size:.98rem;
-        margin-bottom: .9rem;
-    }
-    .hero-chip {
-        font-size: .8rem;
-        padding: .38rem .6rem;
-    }
-    div.stButton > button {
-        min-height:56px;
-        font-size:1.03rem;
-    }
-    h3 {
-        font-size: 1.45rem !important;
-    }
+    .hero-panel { padding: 1rem .85rem 1rem; border-radius: 22px; }
+    .big-title { font-size:1.82rem; margin-top:.2rem; }
+    .sub { font-size:.98rem; margin-bottom: .9rem; }
+    .hero-chip { font-size: .8rem; padding: .38rem .6rem; }
+    div.stButton > button { min-height:56px; font-size:1.03rem; }
+    h3 { font-size: 1.45rem !important; }
 }
 </style>
 """, unsafe_allow_html=True)

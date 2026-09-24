@@ -39,14 +39,55 @@ C_SQUARES = {(0, 1), (1, 0), (0, 6), (1, 7), (6, 0), (7, 1), (6, 7), (7, 6)}
 
 st.markdown("""
 <style>
-.block-container {max-width: 760px; padding-top: 1rem; padding-bottom: 3rem;}
-.big-title {text-align:center; font-size:2rem; font-weight:800; margin:.2rem 0 .1rem;}
-.sub {text-align:center; color:#666; margin-bottom:1rem;}
-.result-card {border:2px solid #222; border-radius:18px; padding:16px; margin:10px 0; background:#fff;}
+/* Streamlit の固定ツールバーに本文が潜り込まないよう、上側に余白を確保する。 */
+.block-container {
+    max-width: 760px;
+    padding-top: 4.25rem !important;
+    padding-bottom: 4rem;
+}
+.big-title {
+    text-align:center;
+    font-size:2rem;
+    font-weight:800;
+    line-height:1.25;
+    margin:.35rem 0 .25rem;
+}
+.sub {text-align:center; color:#777; margin-bottom:1.35rem; line-height:1.55;}
+.result-card {
+    border:2px solid rgba(128,128,128,.55);
+    border-radius:18px;
+    padding:16px;
+    margin:10px 0;
+    background:rgba(255,255,255,.06);
+}
 .result-main {font-size:1.45rem; font-weight:800; text-align:center;}
 .kid-text {font-size:1.15rem; line-height:1.7; text-align:center;}
-.small-note {font-size:.88rem; color:#666;}
-div.stButton > button {border-radius:14px; min-height:48px; font-weight:700;}
+.small-note {font-size:.88rem; color:#777;}
+div.stButton > button {border-radius:14px; min-height:50px; font-weight:700;}
+
+/* 子どもが使う主要操作は少し大きめにする。 */
+[data-testid="stCameraInput"] {margin-top:.35rem;}
+[data-testid="stFileUploader"] {margin-top:.25rem;}
+
+@media (max-width: 768px) {
+    .block-container {
+        padding-top: calc(5.75rem + env(safe-area-inset-top)) !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    .big-title {
+        font-size:1.8rem;
+        margin-top:.5rem;
+    }
+    .sub {
+        font-size:.98rem;
+        margin-bottom:1.15rem;
+    }
+    div.stButton > button {
+        min-height:54px;
+        font-size:1.02rem;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -375,6 +416,33 @@ def classify_cells(warped):
     return board, conf
 
 
+def process_photo_file(file_obj, source_name="写真"):
+    """camera_input / file_uploader の画像を盤面データへ変換する。"""
+    try:
+        data = np.frombuffer(file_obj.getvalue(), np.uint8)
+        img_bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        if img_bgr is None:
+            return False, "画像を読み取れませんでした。もう一度撮影してください。"
+
+        quad, detected = detect_board_quad(img_bgr)
+        warped = warp_board(img_bgr, quad)
+        board, _conf = classify_cells(warped)
+
+        st.session_state.board = board
+        st.session_state.photo_processed = warped
+        if detected:
+            st.session_state.recognition_note = f"{source_name}から盤の四角を自動検出しました。"
+        else:
+            st.session_state.recognition_note = (
+                f"{source_name}では盤の外枠を見つけにくかったため、中央を盤として読み取りました。"
+                "必要ならマスを修正してください。"
+            )
+        st.session_state.page = "analyze"
+        return True, ""
+    except Exception:
+        return False, "写真の解析に失敗しました。盤全体が入るように、なるべく真上から撮り直してください。"
+
+
 # -----------------------------
 # 表示用盤面
 # -----------------------------
@@ -496,19 +564,39 @@ st.markdown('<div class="sub">しゃしんを とったら、おすすめの1手
 if st.session_state.page == "home":
     st.markdown("### 📷 盤面を撮る")
     st.caption("盤全体が入るように、なるべく真上から撮ってください。")
-    pic = st.camera_input("オセロの盤面を撮影", resolution="720p", label_visibility="collapsed")
 
+    # 1) 通常のカメラ。ブラウザがカメラ利用を許可していればそのまま撮影できる。
+    pic = st.camera_input(
+        "オセロの盤面を撮影",
+        resolution="720p",
+        label_visibility="collapsed",
+        key="board_camera",
+    )
     if pic is not None:
-        data = np.frombuffer(pic.getvalue(), np.uint8)
-        img_bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
-        quad, detected = detect_board_quad(img_bgr)
-        warped = warp_board(img_bgr, quad)
-        board, conf = classify_cells(warped)
-        st.session_state.board = board
-        st.session_state.photo_processed = warped
-        st.session_state.recognition_note = "盤の四角を自動検出しました。" if detected else "盤の外枠を見つけにくかったため、中央を盤として読み取りました。必要ならマスを修正してください。"
-        st.session_state.page = "analyze"
-        st.rerun()
+        ok, err = process_photo_file(pic, "カメラ写真")
+        if ok:
+            st.rerun()
+        else:
+            st.error(err)
+
+    # 2) Android のブラウザ内カメラが権限で止まった場合の実用的な逃げ道。
+    #    スマホでは画像選択時に「カメラ」を選べる端末が多い。
+    with st.expander("カメラが開かないとき", expanded=False):
+        st.caption("ブラウザのカメラ権限が使えない場合は、こちらから撮影した写真を読み込めます。")
+        fallback_pic = st.file_uploader(
+            "📷 写真を撮る / 写真を選ぶ",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=False,
+            key="board_photo_upload",
+        )
+        if fallback_pic is not None:
+            ok, err = process_photo_file(fallback_pic, "選んだ写真")
+            if ok:
+                st.rerun()
+            else:
+                st.error(err)
+
+        st.caption("※ カメラ欄に『This app would like to use your camera』と出る場合は、アプリではなくブラウザ側のカメラ権限が止まっています。")
 
     st.markdown("---")
     if st.button("📘 オセロを学ぶ", use_container_width=True, type="secondary"):

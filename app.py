@@ -1,5 +1,6 @@
 import math
 import json
+import threading
 from io import BytesIO
 from functools import lru_cache
 
@@ -8,6 +9,20 @@ import numpy as np
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from streamlit_image_coordinates import streamlit_image_coordinates
+    IMAGE_COORDINATES_AVAILABLE = True
+except Exception:
+    streamlit_image_coordinates = None
+    IMAGE_COORDINATES_AVAILABLE = False
+
+try:
+    from streamlit_back_camera_input import back_camera_input
+    BACK_CAMERA_AVAILABLE = True
+except Exception:
+    back_camera_input = None
+    BACK_CAMERA_AVAILABLE = False
 
 # -----------------------------
 # 基本設定
@@ -426,63 +441,7 @@ hr { border-color: #d8ddd7; }
 }
 
 
-/* 挑戦モード：盤面そのものをタップする8×8グリッド */
-[class*="st-key-challenge_board_grid_"] {
-    background: #176c3b;
-    border: 3px solid #0e4f2a;
-    border-radius: 14px;
-    overflow: hidden;
-    box-shadow: 0 10px 24px rgba(17,17,17,.12);
-    margin: .55rem 0 .75rem;
-}
-[class*="st-key-challenge_board_grid_"] [data-testid="stHorizontalBlock"] {
-    gap: 0 !important;
-}
-[class*="st-key-challenge_board_grid_"] [data-testid="stColumn"] {
-    padding: 0 !important;
-    min-width: 0 !important;
-}
-[class*="st-key-challenge_board_grid_"] [data-testid="stButton"] {
-    margin: 0 !important;
-    padding: 0 !important;
-}
-[class*="st-key-challenge_board_grid_"] button,
-[class*="st-key-challenge_board_grid_"] button:disabled {
-    width: 100% !important;
-    aspect-ratio: 1 / 1 !important;
-    min-height: 0 !important;
-    height: auto !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    border-radius: 0 !important;
-    border: 1px solid #0f512d !important;
-    background: #23844d !important;
-    box-shadow: none !important;
-    opacity: 1 !important;
-    font-size: clamp(1.2rem, 6vw, 2.45rem) !important;
-    line-height: 1 !important;
-}
-/* 石は絵文字で表示。空きマスは文字なし。 */
-[class*="st-key-challenge_board_grid_"] button:disabled,
-[class*="st-key-challenge_board_grid_"] button:disabled * {
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-}
-/* 候補マスだけ有効。黄色い小さい点を表示する。セル全体はタップ可能。 */
-[class*="st-key-challenge_board_grid_"] button:not(:disabled),
-[class*="st-key-challenge_board_grid_"] button:not(:disabled) * {
-    background: #23844d !important;
-    color: #f6db45 !important;
-    -webkit-text-fill-color: #f6db45 !important;
-    font-size: clamp(.9rem, 3.6vw, 1.45rem) !important;
-    font-weight: 900 !important;
-    border-color: #0f512d !important;
-}
-[class*="st-key-challenge_board_grid_"] button:not(:disabled):hover,
-[class*="st-key-challenge_board_grid_"] button:not(:disabled):focus {
-    background: #2b9559 !important;
-    box-shadow: inset 0 0 0 3px rgba(246,219,69,.45) !important;
-}
+/* 挑戦・テスト盤面は画像そのものをタップするため、64個のHTMLボタンは使用しない。 */
 .challenge-instruction {
     text-align: center;
     font-weight: 850;
@@ -865,6 +824,53 @@ def classify_cells(warped):
                 board[r, c] = EMPTY
                 conf[r, c] = 0.65
     return board, conf
+
+
+def camera_value_to_file(value):
+    """Custom camera components can return bytes, a data URL, PIL/numpy, or file-like data.
+    Normalize all supported forms to BytesIO for the existing photo pipeline.
+    """
+    if value is None:
+        return None
+    try:
+        if hasattr(value, "getvalue"):
+            return BytesIO(value.getvalue())
+        if isinstance(value, (bytes, bytearray)):
+            return BytesIO(bytes(value))
+        if isinstance(value, str):
+            import base64
+            if value.startswith("data:image") and "," in value:
+                payload = value.split(",", 1)[1]
+                return BytesIO(base64.b64decode(payload))
+            # Some components return a raw base64 string. Only accept it if decoding succeeds.
+            try:
+                return BytesIO(base64.b64decode(value, validate=True))
+            except Exception:
+                return None
+        if isinstance(value, Image.Image):
+            buf = BytesIO()
+            value.convert("RGB").save(buf, format="JPEG", quality=95)
+            buf.seek(0)
+            return buf
+        if isinstance(value, np.ndarray):
+            arr = value
+            if arr.ndim == 2:
+                img = Image.fromarray(arr.astype(np.uint8), mode="L").convert("RGB")
+            else:
+                img = Image.fromarray(arr.astype(np.uint8)).convert("RGB")
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=95)
+            buf.seek(0)
+            return buf
+        if isinstance(value, dict):
+            for key in ("data", "image", "value", "src"):
+                if key in value:
+                    normalized = camera_value_to_file(value[key])
+                    if normalized is not None:
+                        return normalized
+    except Exception:
+        return None
+    return None
 
 
 def process_photo_file(file_obj, source_name="写真"):
@@ -1524,36 +1530,62 @@ def challenge_candidate_moves(board, player, level):
     return sorted(picked, key=lambda m: (m[0], m[1]))
 
 
+def map_image_click_to_board(value, source_size=720):
+    """streamlit-image-coordinates のクリック値を (row, col) に変換する。盤外は None。"""
+    if not value or "x" not in value or "y" not in value:
+        return None
+    shown_w = float(value.get("width") or source_size)
+    shown_h = float(value.get("height") or shown_w)
+    if shown_w <= 0 or shown_h <= 0:
+        return None
+
+    x = float(value["x"]) * float(source_size) / shown_w
+    y = float(value["y"]) * float(source_size) / shown_h
+
+    margin = 58.0 * source_size / 720.0
+    top = 8.0 * source_size / 720.0
+    board_size = float(source_size) - margin - (10.0 * source_size / 720.0)
+    cell = board_size / 8.0
+    if not (margin <= x < margin + board_size and top <= y < top + board_size):
+        return None
+
+    c = int((x - margin) // cell)
+    r = int((y - top) // cell)
+    if 0 <= r < 8 and 0 <= c < 8:
+        return (r, c)
+    return None
+
+
 def clickable_challenge_board(board, candidates, key_suffix):
-    """8×8盤面そのものをタップするUI。黄色い点のマスだけクリック可能。"""
+    """2枚目の従来デザインそのままの盤面画像を、黄色い点だけ直接タップできるUIにする。
+
+    64個のStreamlitボタンは使わない。render_board() が作る1枚の正方形画像をそのまま表示し、
+    streamlit-image-coordinates が返す実際の表示幅・高さから8×8のマスへ座標変換する。
+    """
     candidate_set = set(candidates)
-    clicked = None
-    with st.container(key=f"challenge_board_grid_{key_suffix}"):
-        for r in range(8):
-            cols = st.columns(8, gap=None)
-            for c in range(8):
-                move = (r, c)
-                if board[r, c] == BLACK:
-                    label = "⚫"
-                    disabled = True
-                elif board[r, c] == WHITE:
-                    label = "⚪"
-                    disabled = True
-                elif move in candidate_set:
-                    label = "•"
-                    disabled = False
-                else:
-                    label = "\u00a0"
-                    disabled = True
-                if cols[c].button(
-                    label,
-                    key=f"challenge_cell_{key_suffix}_{r}_{c}",
-                    disabled=disabled,
-                    use_container_width=True,
-                    help=f"{coord(move)}" if move in candidate_set else None,
-                ):
-                    clicked = move
-    return clicked
+    board_img = render_board(board, legal=candidate_set, size=720)
+
+    if not candidate_set:
+        st.image(board_img, use_container_width=True)
+        return None
+
+    if not IMAGE_COORDINATES_AVAILABLE:
+        st.image(board_img, use_container_width=True)
+        st.error("盤面タップ機能を読み込めませんでした。requirements.txt も今回の版に更新してください。")
+        return None
+
+    value = streamlit_image_coordinates(
+        board_img,
+        key=f"board_tap_{key_suffix}",
+        use_column_width="always",
+        cursor="pointer",
+    )
+    if not value or "x" not in value or "y" not in value:
+        return None
+
+    # コンポーネント自身が返す表示サイズを使う。スマホ幅が変わっても固定幅を仮定しない。
+    move = map_image_click_to_board(value, source_size=720)
+    return move if move in candidate_set else None
 
 
 def _append_animation_frame(frames, durations, board, duration, recommended=None, size=560):
@@ -1839,8 +1871,25 @@ def new_challenge(level=None, variant=None):
 # -----------------------------
 # セッション状態
 # -----------------------------
+class CameraFrameStore:
+    """WebRTC コールバックから最新フレームだけを安全に受け取る、セッション専用の箱。"""
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._frame = None
+
+    def put(self, frame_bgr):
+        with self._lock:
+            self._frame = frame_bgr.copy()
+
+    def get(self):
+        with self._lock:
+            return None if self._frame is None else self._frame.copy()
+
+
 if "page" not in st.session_state:
     st.session_state.page = "home"
+if "camera_frame_store" not in st.session_state:
+    st.session_state.camera_frame_store = CameraFrameStore()
 if "board" not in st.session_state:
     st.session_state.board = initial_board()
 if "photo_processed" not in st.session_state:
@@ -1976,26 +2025,39 @@ if st.session_state.page == "home":
     st.markdown("### 📷 盤面を撮る")
     st.caption("盤全体が入るように、なるべく真上から撮ってください。")
 
-    # 1) 通常のカメラ。ブラウザがカメラ利用を許可していればそのまま撮影できる。
-    pic = st.camera_input(
-        "オセロの盤面を撮影",
-        resolution="720p",
-        label_visibility="collapsed",
-        key="board_camera",
-    )
-    if pic is not None:
-        ok, err = process_photo_file(pic, "カメラ写真")
-        if ok:
-            st.rerun()
-        else:
-            st.error(err)
+    # ホームの主カメラは、スマホの背面カメラをデフォルトにする専用コンポーネントを使う。
+    # st.camera_input は前後カメラの初期値を指定できないため主カメラには使わない。
+    st.caption("外向き（背面）カメラをデフォルトで開きます。映像をタップすると撮影できます。")
+    if BACK_CAMERA_AVAILABLE:
+        rear_value = back_camera_input()
+        if rear_value:
+            rear_file = camera_value_to_file(rear_value)
+            if rear_file is None:
+                st.error("撮影画像を読み取れませんでした。もう一度撮影してください。")
+            else:
+                ok, err = process_photo_file(rear_file, "背面カメラ写真")
+                if ok:
+                    st.rerun()
+                else:
+                    st.error(err)
+    else:
+        st.warning("背面カメラ機能を読み込めませんでした。requirements.txt も今回の版に更新してください。")
 
-    # 2) Android のブラウザ内カメラが権限で止まった場合の実用的な逃げ道。
-    #    スマホでは画像選択時に「カメラ」を選べる端末が多い。
-    with st.expander("カメラが開かないとき", expanded=False):
-        st.caption("ブラウザのカメラ権限が使えない場合は、こちらから撮影した写真を読み込めます。")
+    # 端末・ブラウザ側で専用カメラが使えない場合だけ代替手段を開く。
+    with st.expander("カメラが開かないとき / 別の方法で撮る", expanded=False):
+        fallback_camera = st.camera_input(
+            "標準カメラで撮る",
+            key="board_camera_fallback",
+        )
+        if fallback_camera is not None:
+            ok, err = process_photo_file(fallback_camera, "標準カメラ写真")
+            if ok:
+                st.rerun()
+            else:
+                st.error(err)
+
         fallback_pic = st.file_uploader(
-            "📷 写真を撮る / 写真を選ぶ",
+            "写真を選ぶ",
             type=["jpg", "jpeg", "png"],
             accept_multiple_files=False,
             key="board_photo_upload",
@@ -2006,8 +2068,6 @@ if st.session_state.page == "home":
                 st.rerun()
             else:
                 st.error(err)
-
-        st.caption("※ カメラ欄に『This app would like to use your camera』と出る場合は、アプリではなくブラウザ側のカメラ権限が止まっています。")
 
     st.markdown("---")
     st.markdown('<div class="mode-card"><div class="mode-title">考えて強くなる</div><div class="mode-text">授業で覚えるだけでなく、同じ盤面を何度も動かして「もしここなら？」を試せます。</div></div>', unsafe_allow_html=True)

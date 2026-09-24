@@ -1490,23 +1490,6 @@ def render_level_meter(level):
     return f'<div class="level-meter">{dots}</div>'
 
 
-def move_buttons(moves, key_prefix, step=0):
-    ordered = sorted(moves.keys(), key=lambda m: (m[0], m[1]))
-    if not ordered:
-        return None
-    ncols = min(4, max(2, len(ordered)))
-    cols = st.columns(ncols)
-    clicked = None
-    for i, move in enumerate(ordered):
-        if cols[i % ncols].button(
-            coord(move),
-            use_container_width=True,
-            key=f"{key_prefix}_{step}_{coord(move)}",
-        ):
-            clicked = move
-    return clicked
-
-
 def challenge_candidate_moves(board, player, level):
     """挑戦では全合法手を見せず、比較学習に向く3〜4候補だけを出す。"""
     moves = legal_moves(board, player)
@@ -1579,29 +1562,66 @@ def _append_animation_frame(frames, durations, board, duration, recommended=None
 
 
 def make_turn_animation(board, player, move, flips, reply_move=None, reply_flips=None, size=560):
-    """自分の着手→反転→相手の着手→反転を、ゆっくりしたGIFにする。"""
+    """自分の着手→反転→相手の着手→反転を、子どもが追える速度のGIFにする。"""
     frames, durations = [], []
     working = board.copy()
 
-    _append_animation_frame(frames, durations, working, 900, recommended=move, size=size)
+    # 以前より大幅に遅くする。置く場所を確認→石を置く→1枚ずつ返す、の順を追える速度。
+    _append_animation_frame(frames, durations, working, 1800, recommended=move, size=size)
     working[move[0], move[1]] = player
-    _append_animation_frame(frames, durations, working, 650, size=size)
+    _append_animation_frame(frames, durations, working, 1200, size=size)
     for rr, cc in flips:
         working[rr, cc] = player
-        _append_animation_frame(frames, durations, working, 320, size=size)
-    _append_animation_frame(frames, durations, working, 900, size=size)
+        _append_animation_frame(frames, durations, working, 700, size=size)
+    _append_animation_frame(frames, durations, working, 1800, size=size)
 
     if reply_move is not None:
-        _append_animation_frame(frames, durations, working, 850, recommended=reply_move, size=size)
+        _append_animation_frame(frames, durations, working, 1800, recommended=reply_move, size=size)
         opp = -player
         working[reply_move[0], reply_move[1]] = opp
-        _append_animation_frame(frames, durations, working, 650, size=size)
+        _append_animation_frame(frames, durations, working, 1200, size=size)
         for rr, cc in (reply_flips or []):
             working[rr, cc] = opp
-            _append_animation_frame(frames, durations, working, 320, size=size)
-        _append_animation_frame(frames, durations, working, 1200, size=size)
+            _append_animation_frame(frames, durations, working, 700, size=size)
+        _append_animation_frame(frames, durations, working, 2400, size=size)
     else:
-        _append_animation_frame(frames, durations, working, 1400, size=size)
+        _append_animation_frame(frames, durations, working, 2600, size=size)
+
+    out = BytesIO()
+    frames[0].save(
+        out,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=durations,
+        loop=0,
+        optimize=True,
+        disposal=2,
+    )
+    return out.getvalue()
+
+
+def make_experiment_animation(start_board, steps, size=560):
+    """テスト盤面専用。選んだ手と相手AIの返しを、かなりゆっくり順番に見せる。"""
+    frames, durations = [], []
+    working = start_board.copy()
+    _append_animation_frame(frames, durations, working, 2200, size=size)
+
+    for step in steps:
+        move = tuple(step["move"])
+        player = int(step["player"])
+        flips = [tuple(x) for x in step.get("flips", [])]
+
+        # どこに置くかを先に長めに見せる。
+        _append_animation_frame(frames, durations, working, 2400, recommended=move, size=size)
+        working[move[0], move[1]] = player
+        _append_animation_frame(frames, durations, working, 1500, size=size)
+
+        # 反転は1枚ずつ。6歳児が目で追える速度を優先する。
+        for rr, cc in flips:
+            working[rr, cc] = player
+            _append_animation_frame(frames, durations, working, 950, size=size)
+        _append_animation_frame(frames, durations, working, 2300, size=size)
 
     out = BytesIO()
     frames[0].save(
@@ -1676,11 +1696,13 @@ def set_experiment_from_board(board, player):
 
 
 def play_experiment_turn(chosen):
-    board = st.session_state.experiment_board.copy()
+    start_board = st.session_state.experiment_board.copy()
+    board = start_board.copy()
     user_player = st.session_state.experiment_user_player
     user_moves = legal_moves(board, user_player)
     if chosen not in user_moves:
         return
+
     teacher_move, teacher_flips, teacher_meta = best_move_training(board, user_player)
     chosen_flips = user_moves[chosen]
     chosen_after = apply_move(board, user_player, chosen, chosen_flips)
@@ -1688,6 +1710,7 @@ def play_experiment_turn(chosen):
     best_opp_count = len(legal_moves(teacher_meta["after"], -user_player)) if teacher_meta else 0
     chosen_opp_count = len(legal_moves(chosen_after, -user_player))
     best_reason = explain_move(board, user_player, teacher_move, teacher_flips, teacher_meta)
+
     if same_as_teacher:
         compare_text = f"せんせいAIも {coord(chosen)} をえらんだよ。{best_reason}"
     else:
@@ -1696,6 +1719,7 @@ def play_experiment_turn(chosen):
             compare_text += f" 相手のおける場所も {chosen_opp_count}こから {best_opp_count}こにへらせるよ。"
         else:
             compare_text += " 今回は相手のおける場所の数だけでなく、石の位置とその先まで合わせて選んでいるよ。"
+
     record = {
         "user_move": coord(chosen),
         "teacher_user_move": coord(teacher_move),
@@ -1703,7 +1727,19 @@ def play_experiment_turn(chosen):
         "reply_move": None,
         "reply_reason": None,
         "passes": [],
+        # 1手戻す・アニメーション再生に使う。
+        "before_board": start_board.copy(),
+        "before_player": user_player,
+        "after_board": None,
+        "steps": [
+            {
+                "player": int(user_player),
+                "move": tuple(chosen),
+                "flips": [tuple(x) for x in chosen_flips],
+            }
+        ],
     }
+
     board = chosen_after
     ai_player = -user_player
     safety = 0
@@ -1715,14 +1751,24 @@ def play_experiment_turn(chosen):
             else:
                 record["passes"].append("相手はおける場所がないのでパス。")
             break
+
         ai_move, ai_flips, ai_meta = best_move_training(board, ai_player)
         reason = explain_move(board, ai_player, ai_move, ai_flips, ai_meta)
+        record["steps"].append(
+            {
+                "player": int(ai_player),
+                "move": tuple(ai_move),
+                "flips": [tuple(x) for x in ai_flips],
+            }
+        )
         board = apply_move(board, ai_player, ai_move, ai_flips)
+
         if record["reply_move"] is None:
             record["reply_move"] = coord(ai_move)
             record["reply_reason"] = reason
         else:
             record["passes"].append(f"あなたがパスになったので、相手AIは {coord(ai_move)} にもう一度打ったよ。")
+
         if legal_moves(board, user_player):
             break
         if not legal_moves(board, ai_player):
@@ -1730,9 +1776,48 @@ def play_experiment_turn(chosen):
             break
         record["passes"].append("あなたはおける場所がないのでパス。")
         safety += 1
+
+    record["after_board"] = board.copy()
+
+    # 文字が読めなくても流れを追えるよう、短い順序で音声を組み立てる。
+    audio_parts = [
+        "いまの一手を、ゆっくり見てみよう。",
+        f"あなたは {coord(chosen)} に置いたよ。",
+        f"{len(chosen_flips)}まいの石がひっくり返るよ。",
+        compare_text,
+    ]
+    if record["reply_move"]:
+        audio_parts.extend([
+            f"つぎに、相手AIは {record['reply_move']} に置くよ。",
+            record["reply_reason"] or "相手も、そのあとの形まで考えているよ。",
+        ])
+    audio_parts.extend(record["passes"])
+    audio_parts.append("アニメーションを見たら、つぎの一手をまた考えてみよう。")
+    record["audio_text"] = " ".join(audio_parts)
+
     st.session_state.experiment_board = board
     st.session_state.experiment_history.append(record)
     st.session_state.experiment_step += 1
+
+
+def undo_experiment_step():
+    """テスト盤面を1ターン前へ戻す。"""
+    history = st.session_state.get("experiment_history", [])
+    if not history:
+        return False
+    last = history.pop()
+    before = last.get("before_board")
+    if before is None:
+        # 古いセッションデータなどで復元情報がない場合は最初の盤面へ戻す。
+        st.session_state.experiment_board = st.session_state.experiment_base_board.copy()
+        st.session_state.experiment_user_player = st.session_state.experiment_base_player
+        st.session_state.experiment_history = []
+        st.session_state.experiment_step = 0
+        return True
+    st.session_state.experiment_board = before.copy()
+    st.session_state.experiment_user_player = int(last.get("before_player", st.session_state.experiment_base_player))
+    st.session_state.experiment_step = max(0, st.session_state.experiment_step - 1)
+    return True
 
 
 def new_challenge(level=None, variant=None):
@@ -2078,25 +2163,64 @@ elif st.session_state.page == "experiment":
     user_moves = legal_moves(board, user_player)
     st.markdown(f'<span class="turn-badge">あなたは {user_name}</span>', unsafe_allow_html=True)
 
+    # テスト盤面も、盤面そのものをタップして着手する。
+    # 黄色い点がある合法手だけを有効化し、F3などの座標ボタンは表示しない。
     if user_moves:
-        st.image(render_board(board, legal=list(user_moves.keys())), use_container_width=True)
+        st.markdown('<div class="challenge-instruction">黄色い点を盤面の上で直接タップしてね</div>', unsafe_allow_html=True)
+        chosen = clickable_challenge_board(
+            board,
+            list(user_moves.keys()),
+            f"experiment_{st.session_state.experiment_variant}_{st.session_state.experiment_step}",
+        )
+    else:
+        st.image(render_board(board), use_container_width=True)
+        chosen = None
+
+    # 盤面のすぐ下に「1手戻る」を置く。思考実験をやり直しやすくするための主操作。
+    if st.button(
+        "↩ ひとつ前の盤面に戻る",
+        use_container_width=True,
+        disabled=not bool(st.session_state.experiment_history),
+        key="experiment_undo_under_board",
+    ):
+        if undo_experiment_step():
+            st.rerun()
+
+    if user_moves:
         st.markdown("#### ここに置いたら、相手AIはどう返す？")
-        st.caption("黄色い点がおける場所です。座標ボタンを1つ選んでください。")
-        chosen = move_buttons(user_moves, "experiment_move", st.session_state.experiment_step)
+        st.caption("黄色い点のあるマスを、そのままタップしてください。")
         if chosen is not None:
             with st.spinner("せんせいAIが先を考えています…"):
                 play_experiment_turn(chosen)
             st.rerun()
     else:
-        st.image(render_board(board), use_container_width=True)
         if legal_moves(board, -user_player):
-            st.info("あなたはおける場所がないのでパスです。最初の盤面へ戻すか、別の盤面を試してください。")
+            st.info("あなたはおける場所がないのでパスです。1手戻るか、最初の盤面へ戻して比べられます。")
         else:
             st.success("この局面はゲーム終了です。")
 
     if st.session_state.experiment_history:
         latest = st.session_state.experiment_history[-1]
-        st.markdown("#### いまの1手をふり返る")
+        st.markdown("#### いまの1手を、ゆっくり見てみよう")
+
+        # 最新ターンをかなり遅いGIFで再生。黄色い輪→着手→1枚ずつ反転→相手の返し。
+        if latest.get("before_board") is not None and latest.get("steps"):
+            experiment_gif = make_experiment_animation(
+                latest["before_board"],
+                latest["steps"],
+            )
+            st.image(experiment_gif, use_container_width=True)
+            st.caption("黄色い輪が置く場所です。石は1枚ずつ、かなりゆっくり返ります。アニメーションは繰り返します。")
+
+        # 文字を読めない子でも流れを追えるよう、同じ内容をゆっくり読み上げる。
+        if latest.get("audio_text"):
+            speech_controls(
+                latest["audio_text"],
+                play_label="🔊 この1手をゆっくり聞く",
+                rate=0.72,
+                height=70,
+            )
+
         same = latest["user_move"] == latest["teacher_user_move"]
         cls = "feedback-good" if same else "feedback-neutral"
         title = "AIと同じ手！" if same else "別の手もくらべよう"
@@ -2168,7 +2292,8 @@ elif st.session_state.page == "challenge":
     if st.session_state.challenge_feedback is None:
         st.markdown(f'<span class="turn-badge">{player_name} の番</span>', unsafe_allow_html=True)
         candidates = challenge_candidate_moves(board, player, level)
-        st.markdown('<div class="challenge-instruction">黄色い点をタップしてね</div>', unsafe_allow_html=True)
+        # 挑戦も座標ボタンを出さず、盤面上の黄色い点だけを直接タップして回答する。
+        st.markdown('<div class="challenge-instruction">黄色い点を盤面の上で直接タップしてね</div>', unsafe_allow_html=True)
         chosen = clickable_challenge_board(
             board,
             candidates,

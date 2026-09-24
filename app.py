@@ -40,15 +40,19 @@ C_SQUARES = {(0, 1), (1, 0), (0, 6), (1, 7), (6, 0), (7, 1), (6, 7), (7, 6)}
 st.markdown("""
 <style>
 :root {
-    --bg: #f4f7fb;
-    --surface: #ffffff;
-    --surface-soft: #eef4ff;
-    --border: #cfd8e6;
-    --text: #1f2937;
-    --muted: #5b6474;
-    --primary: #2563eb;
-    --primary-dark: #1d4ed8;
-    --accent: #f59e0b;
+    --bg-top: #0f172a;
+    --bg-bottom: #151f32;
+    --surface: #1b2538;
+    --surface-2: #24324a;
+    --surface-3: #2c3d59;
+    --border: rgba(255,255,255,.10);
+    --text: #eef2ff;
+    --muted: #b9c5dd;
+    --gold-1: #ffd27a;
+    --gold-2: #f3b64c;
+    --gold-text: #2a1a00;
+    --teal: #57d3c6;
+    --shadow: 0 18px 42px rgba(0,0,0,.26);
 }
 
 html, body, [class*="css"] {
@@ -56,8 +60,15 @@ html, body, [class*="css"] {
 }
 
 .stApp {
-    background: linear-gradient(180deg, #f7faff 0%, #eef4fb 100%);
     color: var(--text);
+    background:
+        radial-gradient(circle at top left, rgba(87, 211, 198, .10), transparent 26%),
+        radial-gradient(circle at top right, rgba(255, 210, 122, .10), transparent 24%),
+        linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+}
+
+section.main > div {
+    background: transparent;
 }
 
 /* Streamlit の固定ツールバーに本文が潜り込まないよう、上側に余白を確保する。 */
@@ -67,21 +78,66 @@ html, body, [class*="css"] {
     padding-bottom: 4rem;
 }
 
+.hero-panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 24px;
+    padding: 1.2rem 1rem 1.15rem;
+    margin-bottom: 1.2rem;
+    background:
+        radial-gradient(circle at 15% 15%, rgba(87,211,198,.14), transparent 28%),
+        radial-gradient(circle at 85% 18%, rgba(255,210,122,.12), transparent 24%),
+        linear-gradient(180deg, rgba(36,50,74,.96) 0%, rgba(27,37,56,.98) 100%);
+    box-shadow: var(--shadow);
+}
+.hero-kicker {
+    text-align: center;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .18em;
+    color: var(--gold-1);
+    margin-bottom: .45rem;
+}
 .big-title {
     text-align:center;
-    font-size:2rem;
-    font-weight:800;
-    line-height:1.25;
-    margin:.35rem 0 .25rem;
+    font-size:2.08rem;
+    font-weight:900;
+    line-height:1.2;
+    margin:.10rem 0 .35rem;
     color: var(--text);
 }
 .sub {
     text-align:center;
     color: var(--muted);
-    margin-bottom:1.35rem;
-    line-height:1.55;
+    margin: 0 auto 1rem;
+    line-height:1.6;
+    max-width: 30rem;
 }
+.hero-chips {
+    display:flex;
+    gap:.5rem;
+    flex-wrap:wrap;
+    justify-content:center;
+}
+.hero-chip {
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.10);
+    color: var(--text);
+    padding: .42rem .7rem;
+    border-radius: 999px;
+    font-size: .88rem;
+    font-weight: 700;
+}
+
 .small-note {font-size:.88rem; color:var(--muted);}
+
+h3 {
+    color: var(--text) !important;
+    font-size: 1.65rem !important;
+    font-weight: 800 !important;
+    margin-bottom: .25rem !important;
+}
 
 /* カード類 */
 .result-card,
@@ -90,66 +146,196 @@ html, body, [class*="css"] {
 [data-testid="stFileUploader"],
 [data-testid="stExpander"] {
     border:1px solid var(--border) !important;
-    border-radius:18px !important;
-    background: var(--surface) !important;
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.06);
+    border-radius:20px !important;
+    background: linear-gradient(180deg, rgba(44,61,89,.98) 0%, rgba(27,37,56,.98) 100%) !important;
+    box-shadow: var(--shadow);
 }
 
 .result-card {
     padding:16px;
     margin:10px 0;
 }
-.result-main {font-size:1.45rem; font-weight:800; text-align:center; color:var(--text);}
+.result-main {font-size:1.45rem; font-weight:900; text-align:center; color:var(--gold-1);}
 .kid-text {font-size:1.15rem; line-height:1.7; text-align:center; color:var(--text);}
 
 /* ボタン */
 div.stButton > button,
 [data-testid="baseButton-secondary"],
 [data-testid="baseButton-primary"] {
-    border-radius:14px !important;
-    min-height:50px;
-    font-weight:700;
-    border: 1px solid #bfd1ff !important;
-    background: linear-gradient(180deg, #4f8dfd 0%, #2563eb 100%) !important;
-    color: white !important;
-    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.22);
+    border-radius:16px !important;
+    min-height:54px;
+    font-weight:800;
+    letter-spacing:.01em;
+    border: 1px solid rgba(255,210,122,.35) !important;
+    background: linear-gradient(180deg, var(--gold-1) 0%, var(--gold-2) 100%) !important;
+    color: var(--gold-text) !important;
+    box-shadow: 0 10px 24px rgba(243, 182, 76, 0.22);
 }
 
 div.stButton > button:hover,
 [data-testid="baseButton-secondary"]:hover,
 [data-testid="baseButton-primary"]:hover {
-    background: linear-gradient(180deg, #3d7ef6 0%, #1d4ed8 100%) !important;
-    border-color: #94b4ff !important;
+    background: linear-gradient(180deg, #ffd98f 0%, #efad36 100%) !important;
+    border-color: rgba(255,227,169,.55) !important;
 }
 
-/* expander 見出し */
-details {
-    background: transparent;
+div.stButton > button:focus,
+[data-testid="baseButton-secondary"]:focus,
+[data-testid="baseButton-primary"]:focus {
+    box-shadow: 0 0 0 3px rgba(87, 211, 198, .28), 0 10px 24px rgba(243, 182, 76, 0.22) !important;
 }
-summary {
-    border-radius: 18px;
+
+/* Camera/expander areas */
+[data-testid="stCameraInput"] {margin-top:.35rem; padding: .85rem;}
+[data-testid="stFileUploader"] {margin-top:.25rem; padding: .85rem;}
+[data-testid="stExpander"] {
+    padding: .35rem .5rem;
 }
 [data-testid="stExpander"] summary {
-    background: var(--surface-soft) !important;
-    border-radius: 18px !important;
+    background: linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,.03) 100%) !important;
+    border-radius: 16px !important;
     color: var(--text) !important;
 }
 
-/* 入力ラベルと通常テキスト */
-label, p, li, h1, h2, h3, h4, h5, h6, span, div {
-    color: inherit;
+/* captions / labels: Streamlit標準の薄い文字が背景に沈まないよう明示する */
+.stApp [data-testid="stMarkdownContainer"],
+.stApp [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stMarkdownContainer"] li,
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp label,
+.stApp small {
+    color: var(--text) !important;
+}
+[data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] p {
+    color: var(--muted) !important;
+}
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary span {
+    color: var(--text) !important;
 }
 
-/* 子どもが使う主要操作は少し大きめにする。 */
-[data-testid="stCameraInput"] {margin-top:.35rem; padding: .75rem;}
-[data-testid="stFileUploader"] {margin-top:.25rem; padding: .75rem;}
+/* gold button text must stay dark even when markdown/text rules are applied */
+div.stButton > button,
+div.stButton > button p,
+div.stButton > button span,
+[data-testid="baseButton-secondary"],
+[data-testid="baseButton-secondary"] p,
+[data-testid="baseButton-primary"],
+[data-testid="baseButton-primary"] p {
+    color: var(--gold-text) !important;
+}
 
-/* selectbox / radio など */
+/* camera/file uploader内の文字 */
+[data-testid="stCameraInput"] p,
+[data-testid="stCameraInput"] span,
+[data-testid="stFileUploader"] p,
+[data-testid="stFileUploader"] span {
+    color: var(--text) !important;
+}
+[data-testid="stCameraInput"] button,
+[data-testid="stFileUploader"] button {
+    color: var(--gold-text) !important;
+}
+
+/* selectbox / radio / input など */
 [data-baseweb="select"] > div,
 [data-testid="stRadio"] > div,
-[data-testid="stHorizontalBlock"] > div,
 [data-testid="stTextInput"] input {
-    background: var(--surface) !important;
+    background: var(--surface-2) !important;
+    color: var(--text) !important;
+    border: 1px solid rgba(255,255,255,.14) !important;
+    border-radius: 14px !important;
+}
+[data-baseweb="select"] span,
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] p,
+[data-testid="stTextInput"] input {
+    color: var(--text) !important;
+}
+[role="listbox"],
+[role="option"] {
+    background: #24324a !important;
+    color: #eef2ff !important;
+}
+[role="option"]:hover {
+    background: #314462 !important;
+}
+
+.mode-card,
+.think-card,
+.challenge-card {
+    border: 1px solid rgba(255,255,255,.11);
+    border-radius: 20px;
+    padding: 1rem;
+    margin: .65rem 0;
+    background: linear-gradient(180deg, rgba(44,61,89,.96) 0%, rgba(27,37,56,.98) 100%);
+    box-shadow: var(--shadow);
+}
+.mode-title {
+    color: var(--gold-1);
+    font-size: 1.15rem;
+    font-weight: 900;
+    margin-bottom: .3rem;
+}
+.mode-text {
+    color: var(--muted);
+    line-height: 1.6;
+}
+.turn-badge {
+    display:inline-block;
+    border-radius:999px;
+    padding:.35rem .65rem;
+    background:rgba(87,211,198,.13);
+    border:1px solid rgba(87,211,198,.25);
+    color:#b9fff7;
+    font-weight:800;
+    margin:.2rem 0 .65rem;
+}
+.feedback-good,
+.feedback-bad,
+.feedback-neutral {
+    border-radius:18px;
+    padding: .9rem 1rem;
+    margin:.7rem 0;
+    line-height:1.65;
+    border:1px solid rgba(255,255,255,.10);
+    color: var(--text);
+}
+.feedback-good {background:rgba(52,211,153,.12); border-color:rgba(52,211,153,.28);}
+.feedback-bad {background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.28);}
+.feedback-neutral {background:rgba(255,210,122,.10); border-color:rgba(255,210,122,.22);}
+.feedback-good b {color:#a7f3d0;}
+.feedback-bad b {color:#fecaca;}
+.feedback-neutral b {color:#ffe1a6;}
+.level-meter {
+    display:flex;
+    gap:.35rem;
+    justify-content:center;
+    margin:.5rem 0 .9rem;
+}
+.level-dot {
+    width:28px;
+    height:8px;
+    border-radius:99px;
+    background:rgba(255,255,255,.12);
+}
+.level-dot.on {
+    background:linear-gradient(90deg, var(--teal), var(--gold-1));
+}
+
+[data-testid="stAlert"] {
+    background: rgba(36,50,74,.96) !important;
+    border: 1px solid rgba(255,255,255,.12) !important;
+    color: var(--text) !important;
+}
+[data-testid="stAlert"] * {
+    color: var(--text) !important;
+}
+[data-testid="stProgress"] p,
+[data-testid="stProgress"] span {
     color: var(--text) !important;
 }
 
@@ -157,32 +343,39 @@ label, p, li, h1, h2, h3, h4, h5, h6, span, div {
     padding:16px 16px 12px;
     margin:.4rem 0 1rem;
 }
-.lesson-stage {font-size:.9rem; color:var(--primary-dark); font-weight:700; margin-bottom:.25rem;}
-.lesson-title {font-size:1.45rem; font-weight:800; line-height:1.35; color:var(--text);}
+.lesson-stage {font-size:.9rem; color:var(--teal); font-weight:800; margin-bottom:.25rem;}
+.lesson-title {font-size:1.45rem; font-weight:900; line-height:1.35; color:var(--text);}
 .lesson-goal {font-size:1.02rem; line-height:1.65; margin-top:.65rem; color:var(--text);}
 .lesson-point {
-    border-left:5px solid var(--accent);
-    padding:.7rem .9rem;
-    margin:.7rem 0;
-    border-radius:12px;
-    background:#fff7e7;
+    border-left:5px solid var(--gold-1);
+    padding:.8rem .95rem;
+    margin:.8rem 0;
+    border-radius:14px;
+    background: rgba(255, 210, 122, .10);
     font-size:1.08rem;
     line-height:1.7;
     color:var(--text);
 }
 .lesson-seq {
     font-size:1.12rem;
-    font-weight:800;
+    font-weight:900;
     text-align:center;
-    padding:.7rem;
-    border-radius:12px;
-    background:#e8f0ff;
+    padding:.8rem;
+    border-radius:14px;
+    background: rgba(87, 211, 198, .14);
+    border: 1px solid rgba(87, 211, 198, .18);
     margin:.65rem 0;
     color:var(--text);
 }
 
 hr {
-    border-color: #d9e2f2;
+    border-color: rgba(255,255,255,.10);
+}
+
+[data-testid="stImage"] img {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: var(--shadow);
 }
 
 @media (max-width: 768px) {
@@ -191,17 +384,28 @@ hr {
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
+    .hero-panel {
+        padding: 1rem .85rem 1rem;
+        border-radius: 22px;
+    }
     .big-title {
-        font-size:1.8rem;
-        margin-top:.5rem;
+        font-size:1.82rem;
+        margin-top:.2rem;
     }
     .sub {
         font-size:.98rem;
-        margin-bottom:1.15rem;
+        margin-bottom: .9rem;
+    }
+    .hero-chip {
+        font-size: .8rem;
+        padding: .38rem .6rem;
     }
     div.stButton > button {
-        min-height:54px;
-        font-size:1.02rem;
+        min-height:56px;
+        font-size:1.03rem;
+    }
+    h3 {
+        font-size: 1.45rem !important;
     }
 }
 </style>
@@ -366,6 +570,32 @@ def best_move(board, player):
         score = negamax(child, -player, depth - 1, -math.inf, math.inf, player)
         scored.append((score, move, flips, child))
 
+    scored.sort(key=lambda x: x[0], reverse=True)
+    score, move, flips, child = scored[0]
+    return move, flips, {"score": score, "after": child, "all": scored, "depth": depth}
+
+
+def best_move_training(board, player):
+    """思考実験・理解度テスト用の高速探索。スマホで繰り返し使える待ち時間を優先する。"""
+    moves = legal_moves(board, player)
+    if not moves:
+        return None, None, None
+
+    empties = int(np.sum(board == EMPTY))
+    if empties > 40:
+        depth = 3
+    elif empties > 24:
+        depth = 3
+    elif empties > 12:
+        depth = 4
+    else:
+        depth = min(empties + 1, 6)
+
+    scored = []
+    for move, flips in moves.items():
+        child = apply_move(board, player, move, flips)
+        score = negamax(child, -player, depth - 1, -math.inf, math.inf, player)
+        scored.append((score, move, flips, child))
     scored.sort(key=lambda x: x[0], reverse=True)
     score, move, flips, child = scored[0]
     return move, flips, {"score": score, "after": child, "all": scored, "depth": depth}
@@ -1077,6 +1307,204 @@ def next_lesson_id(lesson_id):
         return None
     return ids[idx + 1] if idx + 1 < len(ids) else None
 
+
+# -----------------------------
+# 思考実験・理解度テスト用盤面
+# -----------------------------
+PRACTICE_LEVELS = {
+    1: {"name": "レベル1　やさしい局面", "plies": 8, "hint": "おける場所が少ない局面。まずは安全そうな場所を1つずつ比べよう。"},
+    2: {"name": "レベル2　序盤", "plies": 14, "hint": "取る石の数だけでなく、角・辺と相手の次の手も見よう。"},
+    3: {"name": "レベル3　中盤", "plies": 24, "hint": "次の相手の手、その次の自分の手まで考えよう。"},
+    4: {"name": "レベル4　むずかしい中盤", "plies": 36, "hint": "少なく返す手や、相手の自由をうばう手も候補にしよう。"},
+    5: {"name": "レベル5　終盤", "plies": 50, "hint": "空きマスが少ないので、最後まで読むつもりで考えよう。"},
+}
+
+
+def generate_practice_position(level=1, variant=0):
+    """合法手だけを使って、再現可能な練習局面を作る。"""
+    level = int(max(1, min(5, level)))
+    target_plies = PRACTICE_LEVELS[level]["plies"]
+    board = initial_board()
+    player = BLACK
+    for ply in range(target_plies):
+        moves = legal_moves(board, player)
+        if not moves:
+            if not legal_moves(board, -player):
+                break
+            player = -player
+            moves = legal_moves(board, player)
+            if not moves:
+                break
+        ordered = sorted(
+            moves.items(),
+            key=lambda kv: (POSITION_WEIGHTS[kv[0][0], kv[0][1]], len(kv[1]), -kv[0][0], -kv[0][1]),
+            reverse=True,
+        )
+        idx = (variant * 7 + ply * 3 + level * 5) % len(ordered)
+        move, flips = ordered[idx]
+        board = apply_move(board, player, move, flips)
+        player = -player
+    if not legal_moves(board, player) and legal_moves(board, -player):
+        player = -player
+    return board, player
+
+
+def get_practice_position(level=1, variant=0):
+    """最低2択になる局面を優先して返す。"""
+    fallback = None
+    for offset in range(18):
+        board, player = generate_practice_position(level, variant + offset)
+        moves = legal_moves(board, player)
+        if fallback is None and moves:
+            fallback = (board, player, variant + offset)
+        if len(moves) >= 2:
+            if level <= 2 and len(moves) <= 6:
+                return board, player, variant + offset
+            if level >= 3:
+                return board, player, variant + offset
+    if fallback is not None:
+        return fallback
+    return initial_board(), BLACK, variant
+
+
+def move_quality_summary(board, player, move):
+    flips = flips_for_move(board, player, move[0], move[1])
+    after = apply_move(board, player, move, flips)
+    opp_count = len(legal_moves(after, -player))
+    if move in CORNERS:
+        return f"{coord(move)}は かど。{len(flips)}こ返して、相手のおける場所は {opp_count}こだよ。"
+    if corner_adjacent_to_empty_corner(move, board):
+        return f"{coord(move)}は かどの近く。相手に かどをわたさないか注意しよう。"
+    if len(flips) <= 2:
+        return f"{coord(move)}は {len(flips)}こだけ返す手。相手のおける場所は {opp_count}こだよ。"
+    return f"{coord(move)}は {len(flips)}こ返す手。相手のおける場所は {opp_count}こだよ。"
+
+
+def render_level_meter(level):
+    dots = ''.join('<span class="level-dot on"></span>' if i <= level else '<span class="level-dot"></span>' for i in range(1, 6))
+    return f'<div class="level-meter">{dots}</div>'
+
+
+def move_buttons(moves, key_prefix, step=0):
+    ordered = sorted(moves.keys(), key=lambda m: (m[0], m[1]))
+    if not ordered:
+        return None
+    ncols = min(4, max(2, len(ordered)))
+    cols = st.columns(ncols)
+    clicked = None
+    for i, move in enumerate(ordered):
+        if cols[i % ncols].button(
+            coord(move),
+            use_container_width=True,
+            key=f"{key_prefix}_{step}_{coord(move)}",
+        ):
+            clicked = move
+    return clicked
+
+
+def reset_experiment(level=None, variant=None):
+    if level is None:
+        level = st.session_state.get("experiment_level", 2)
+    if variant is None:
+        variant = st.session_state.get("experiment_variant", 0)
+    board, player, actual_variant = get_practice_position(level, variant)
+    st.session_state.experiment_level = level
+    st.session_state.experiment_variant = actual_variant
+    st.session_state.experiment_base_board = board.copy()
+    st.session_state.experiment_base_player = player
+    st.session_state.experiment_board = board.copy()
+    st.session_state.experiment_user_player = player
+    st.session_state.experiment_history = []
+    st.session_state.experiment_step = 0
+    st.session_state.experiment_custom = False
+
+
+def set_experiment_from_board(board, player):
+    st.session_state.experiment_base_board = board.copy()
+    st.session_state.experiment_base_player = player
+    st.session_state.experiment_board = board.copy()
+    st.session_state.experiment_user_player = player
+    st.session_state.experiment_history = []
+    st.session_state.experiment_step = 0
+    st.session_state.experiment_custom = True
+
+
+def play_experiment_turn(chosen):
+    board = st.session_state.experiment_board.copy()
+    user_player = st.session_state.experiment_user_player
+    user_moves = legal_moves(board, user_player)
+    if chosen not in user_moves:
+        return
+    teacher_move, teacher_flips, teacher_meta = best_move_training(board, user_player)
+    chosen_flips = user_moves[chosen]
+    chosen_after = apply_move(board, user_player, chosen, chosen_flips)
+    same_as_teacher = chosen == teacher_move
+    best_opp_count = len(legal_moves(teacher_meta["after"], -user_player)) if teacher_meta else 0
+    chosen_opp_count = len(legal_moves(chosen_after, -user_player))
+    best_reason = explain_move(board, user_player, teacher_move, teacher_flips, teacher_meta)
+    if same_as_teacher:
+        compare_text = f"せんせいAIも {coord(chosen)} をえらんだよ。{best_reason}"
+    else:
+        compare_text = f"あなたは {coord(chosen)}。せんせいAIなら {coord(teacher_move)}。{best_reason}"
+        if best_opp_count < chosen_opp_count:
+            compare_text += f" 相手のおける場所も {chosen_opp_count}こから {best_opp_count}こにへらせるよ。"
+        else:
+            compare_text += " 今回は相手のおける場所の数だけでなく、石の位置とその先まで合わせて選んでいるよ。"
+    record = {
+        "user_move": coord(chosen),
+        "teacher_user_move": coord(teacher_move),
+        "compare": compare_text,
+        "reply_move": None,
+        "reply_reason": None,
+        "passes": [],
+    }
+    board = chosen_after
+    ai_player = -user_player
+    safety = 0
+    while safety < 4:
+        ai_moves = legal_moves(board, ai_player)
+        if not ai_moves:
+            if not legal_moves(board, user_player):
+                record["passes"].append("両方ともおけないのでゲーム終了。")
+            else:
+                record["passes"].append("相手はおける場所がないのでパス。")
+            break
+        ai_move, ai_flips, ai_meta = best_move_training(board, ai_player)
+        reason = explain_move(board, ai_player, ai_move, ai_flips, ai_meta)
+        board = apply_move(board, ai_player, ai_move, ai_flips)
+        if record["reply_move"] is None:
+            record["reply_move"] = coord(ai_move)
+            record["reply_reason"] = reason
+        else:
+            record["passes"].append(f"あなたがパスになったので、相手AIは {coord(ai_move)} にもう一度打ったよ。")
+        if legal_moves(board, user_player):
+            break
+        if not legal_moves(board, ai_player):
+            record["passes"].append("このあと両方ともおけないのでゲーム終了。")
+            break
+        record["passes"].append("あなたはおける場所がないのでパス。")
+        safety += 1
+    st.session_state.experiment_board = board
+    st.session_state.experiment_history.append(record)
+    st.session_state.experiment_step += 1
+
+
+def new_challenge(level=None, variant=None):
+    if level is None:
+        level = st.session_state.get("challenge_level", 1)
+    if variant is None:
+        variant = st.session_state.get("challenge_variant", 0)
+    board, player, actual_variant = get_practice_position(level, variant)
+    st.session_state.challenge_level = level
+    st.session_state.challenge_variant = actual_variant
+    st.session_state.challenge_board = board.copy()
+    st.session_state.challenge_player = player
+    st.session_state.challenge_feedback = None
+    st.session_state.challenge_selected = None
+    st.session_state.challenge_best = None
+    st.session_state.challenge_next_level = level
+
+
 # -----------------------------
 # セッション状態
 # -----------------------------
@@ -1092,6 +1520,24 @@ if "current_lesson" not in st.session_state:
     st.session_state.current_lesson = "01"
 if "completed_lessons" not in st.session_state:
     st.session_state.completed_lessons = []
+if "experiment_level" not in st.session_state:
+    st.session_state.experiment_level = 2
+if "experiment_variant" not in st.session_state:
+    st.session_state.experiment_variant = 0
+if "experiment_board" not in st.session_state:
+    reset_experiment(2, 0)
+if "experiment_custom" not in st.session_state:
+    st.session_state.experiment_custom = False
+if "challenge_level" not in st.session_state:
+    st.session_state.challenge_level = 1
+if "challenge_variant" not in st.session_state:
+    st.session_state.challenge_variant = 0
+if "challenge_total" not in st.session_state:
+    st.session_state.challenge_total = 0
+if "challenge_correct" not in st.session_state:
+    st.session_state.challenge_correct = 0
+if "challenge_board" not in st.session_state:
+    new_challenge(1, 0)
 
 
 def go(page):
@@ -1102,8 +1548,18 @@ def go(page):
 # -----------------------------
 # UI: ホーム
 # -----------------------------
-st.markdown('<div class="big-title">⚫ オセロせんせい ⚪</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub">しゃしんを とったら、おすすめの1手をいっしょに考えるよ</div>', unsafe_allow_html=True)
+st.markdown('''
+<div class="hero-panel">
+    <div class="hero-kicker">PHOTO × STRATEGY × LESSON</div>
+    <div class="big-title">⚫ オセロせんせい ⚪</div>
+    <div class="sub">しゃしんを とったら、おすすめの1手をいっしょに考えるよ</div>
+    <div class="hero-chips">
+        <span class="hero-chip">📷 盤面を撮る</span>
+        <span class="hero-chip">⭐ おすすめの1手</span>
+        <span class="hero-chip">📘 授業で学ぶ</span>
+    </div>
+</div>
+''', unsafe_allow_html=True)
 
 if st.session_state.page == "home":
     st.markdown("### 📷 盤面を撮る")
@@ -1143,8 +1599,15 @@ if st.session_state.page == "home":
         st.caption("※ カメラ欄に『This app would like to use your camera』と出る場合は、アプリではなくブラウザ側のカメラ権限が止まっています。")
 
     st.markdown("---")
+    st.markdown('<div class="mode-card"><div class="mode-title">考えて強くなる</div><div class="mode-text">授業で覚えるだけでなく、同じ盤面を何度も動かして「もしここなら？」を試せます。</div></div>', unsafe_allow_html=True)
     if st.button("📘 オセロを学ぶ（授業）", use_container_width=True, type="secondary"):
         go("learn")
+
+    c_test, c_challenge = st.columns(2)
+    if c_test.button("🧪 テスト盤面", use_container_width=True):
+        go("experiment")
+    if c_challenge.button("🎯 挑戦", use_container_width=True):
+        go("challenge")
 
     with st.expander("写真なしで試す"):
         st.write("最初の盤面から、おすすめ手の動きを確認できます。")
@@ -1244,6 +1707,193 @@ elif st.session_state.page == "result":
         go("home")
     if c2.button("📘 オセロを学ぶ（授業）", use_container_width=True):
         go("learn")
+    if st.button("🧪 この盤面で『もしここなら？』を試す", use_container_width=True):
+        set_experiment_from_board(board, player)
+        go("experiment")
+
+
+# -----------------------------
+# UI: 思考実験テスト盤面
+# -----------------------------
+elif st.session_state.page == "experiment":
+    top1, top2 = st.columns(2)
+    if top1.button("← ホームへ", use_container_width=True):
+        go("home")
+    if top2.button("🎯 挑戦へ", use_container_width=True):
+        go("challenge")
+
+    st.markdown("### 🧪 テスト盤面")
+    st.caption("あなたが1手打つ → せんせいAIが相手のおすすめ手を打つ、を何度も繰り返せます。最初の局面へ戻して別の手も比較できます。")
+
+    level_labels = {k: v["name"] for k, v in PRACTICE_LEVELS.items()}
+    selected_level = st.selectbox(
+        "盤面のむずかしさ",
+        list(level_labels.keys()),
+        index=max(0, st.session_state.experiment_level - 1),
+        format_func=lambda x: level_labels[x],
+        key="experiment_level_select",
+    )
+    if selected_level != st.session_state.experiment_level:
+        reset_experiment(selected_level, st.session_state.experiment_variant + 1)
+        st.rerun()
+
+    if st.session_state.get("experiment_custom", False):
+        st.markdown('<div class="feedback-neutral"><b>写真・実戦から持ってきた盤面</b><br>この同じ局面から、何通りでも試せます。</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(render_level_meter(st.session_state.experiment_level), unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="think-card"><div class="mode-title">考えるポイント</div><div class="mode-text">{PRACTICE_LEVELS[st.session_state.experiment_level]["hint"]}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    board = st.session_state.experiment_board
+    user_player = st.session_state.experiment_user_player
+    user_name = "くろ" if user_player == BLACK else "しろ"
+    user_moves = legal_moves(board, user_player)
+    st.markdown(f'<span class="turn-badge">あなたは {user_name}</span>', unsafe_allow_html=True)
+
+    if user_moves:
+        st.image(render_board(board, legal=list(user_moves.keys())), use_container_width=True)
+        st.markdown("#### ここに置いたら、相手AIはどう返す？")
+        st.caption("黄色い点がおける場所です。座標ボタンを1つ選んでください。")
+        chosen = move_buttons(user_moves, "experiment_move", st.session_state.experiment_step)
+        if chosen is not None:
+            with st.spinner("せんせいAIが先を考えています…"):
+                play_experiment_turn(chosen)
+            st.rerun()
+    else:
+        st.image(render_board(board), use_container_width=True)
+        if legal_moves(board, -user_player):
+            st.info("あなたはおける場所がないのでパスです。最初の盤面へ戻すか、別の盤面を試してください。")
+        else:
+            st.success("この局面はゲーム終了です。")
+
+    if st.session_state.experiment_history:
+        latest = st.session_state.experiment_history[-1]
+        st.markdown("#### いまの1手をふり返る")
+        same = latest["user_move"] == latest["teacher_user_move"]
+        cls = "feedback-good" if same else "feedback-neutral"
+        title = "AIと同じ手！" if same else "別の手もくらべよう"
+        st.markdown(
+            f'<div class="{cls}"><b>{title}</b><br>{latest["compare"]}</div>',
+            unsafe_allow_html=True,
+        )
+        if latest["reply_move"]:
+            st.markdown(
+                f'<div class="feedback-neutral"><b>相手AIの返し：{latest["reply_move"]}</b><br>{latest["reply_reason"]}</div>',
+                unsafe_allow_html=True,
+            )
+        for note in latest["passes"]:
+            st.caption(note)
+
+        with st.expander("これまでの実験を見る", expanded=False):
+            for i, rec in enumerate(reversed(st.session_state.experiment_history), start=1):
+                n = len(st.session_state.experiment_history) - i + 1
+                reply = rec["reply_move"] or "パス"
+                st.write(f"{n}. あなた {rec['user_move']} → 相手AI {reply}")
+
+    a, b = st.columns(2)
+    if a.button("↩ 同じ最初の盤面に戻る", use_container_width=True):
+        st.session_state.experiment_board = st.session_state.experiment_base_board.copy()
+        st.session_state.experiment_user_player = st.session_state.experiment_base_player
+        st.session_state.experiment_history = []
+        st.session_state.experiment_step = 0
+        st.rerun()
+    if b.button("🔄 別の盤面", use_container_width=True):
+        reset_experiment(st.session_state.experiment_level, st.session_state.experiment_variant + 1)
+        st.rerun()
+
+
+# -----------------------------
+# UI: 適応型チャレンジ
+# -----------------------------
+elif st.session_state.page == "challenge":
+    top1, top2 = st.columns(2)
+    if top1.button("← ホームへ", use_container_width=True):
+        go("home")
+    if top2.button("🧪 テスト盤面へ", use_container_width=True):
+        go("experiment")
+
+    level = st.session_state.challenge_level
+    st.markdown("### 🎯 どこに打つ？")
+    st.caption("正解なら次のレベルへ。不正解なら1段やさしい盤面へ戻って、同じ考え方をもう一度練習します。")
+    st.markdown(render_level_meter(level), unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="challenge-card"><div class="mode-title">{PRACTICE_LEVELS[level]["name"]}</div><div class="mode-text">{PRACTICE_LEVELS[level]["hint"]}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    board = st.session_state.challenge_board
+    player = st.session_state.challenge_player
+    player_name = "くろ" if player == BLACK else "しろ"
+    moves = legal_moves(board, player)
+
+    if st.session_state.challenge_feedback is None:
+        st.markdown(f'<span class="turn-badge">{player_name} の番</span>', unsafe_allow_html=True)
+        show_legal = level <= 3
+        st.image(render_board(board, legal=list(moves.keys()) if show_legal else None), use_container_width=True)
+        if show_legal:
+            st.caption("黄色い点がおける場所。いちばんよいと思う手を選んでください。")
+        else:
+            st.caption("レベル4・5は黄色いヒントなし。座標ボタンから考えて選んでください。")
+
+        chosen = move_buttons(moves, "challenge_move", st.session_state.challenge_variant)
+        if chosen is not None:
+            with st.spinner("答えを確かめています…"):
+                best, best_flips, meta = best_move_training(board, player)
+                top_score = meta["all"][0][0]
+                accepted = {m for score, m, _f, _child in meta["all"] if abs(score - top_score) < 1e-9}
+                correct = chosen in accepted
+                reason = explain_move(board, player, best, best_flips, meta)
+                st.session_state.challenge_total += 1
+                if correct:
+                    st.session_state.challenge_correct += 1
+                next_level = min(5, level + 1) if correct else max(1, level - 1)
+                st.session_state.challenge_feedback = {
+                    "correct": correct,
+                    "chosen": coord(chosen),
+                    "best": coord(best),
+                    "reason": reason,
+                    "chosen_summary": move_quality_summary(board, player, chosen),
+                    "next_level": next_level,
+                }
+                st.session_state.challenge_selected = chosen
+                st.session_state.challenge_best = best
+                st.session_state.challenge_next_level = next_level
+            st.rerun()
+    else:
+        fb = st.session_state.challenge_feedback
+        st.image(render_board(board, recommended=st.session_state.challenge_best), use_container_width=True)
+        if fb["correct"]:
+            st.markdown(
+                f'<div class="feedback-good"><b>せいかい！ {fb["chosen"]}</b><br>{fb["reason"]}<br>つぎはレベル {fb["next_level"]}。</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div class="feedback-bad"><b>今回は {fb["chosen"]}。AIのおすすめは {fb["best"]}</b><br>{fb["chosen_summary"]}<br><br><b>おすすめ手の理由：</b>{fb["reason"]}<br>つぎはレベル {fb["next_level"]} のやさしい盤面で確認しよう。</div>',
+                unsafe_allow_html=True,
+            )
+        if st.button(f"つぎの問題へ　レベル {fb['next_level']}", use_container_width=True, type="primary"):
+            new_level = fb["next_level"]
+            st.session_state.challenge_level = new_level
+            st.session_state.challenge_variant += 1
+            new_challenge(new_level, st.session_state.challenge_variant)
+            st.rerun()
+
+    st.caption(f"これまで：{st.session_state.challenge_correct} / {st.session_state.challenge_total} 正解")
+    with st.expander("レベルを選び直す", expanded=False):
+        manual_level = st.selectbox(
+            "開始レベル",
+            list(PRACTICE_LEVELS.keys()),
+            index=level - 1,
+            format_func=lambda x: PRACTICE_LEVELS[x]["name"],
+            key="challenge_level_manual",
+        )
+        if st.button("このレベルからやり直す", use_container_width=True):
+            st.session_state.challenge_variant += 1
+            new_challenge(manual_level, st.session_state.challenge_variant)
+            st.rerun()
 
 
 # -----------------------------
@@ -1255,6 +1905,12 @@ elif st.session_state.page == "learn":
 
     st.markdown("### 📘 オセロを学ぶ")
     st.caption("1つずつ授業をえらんで、初歩から上級まで順番に進めます。定石は『丸暗記』ではなく、盤の形を見比べながら学びます。")
+
+    learn_c1, learn_c2 = st.columns(2)
+    if learn_c1.button("🧪 テスト盤面", use_container_width=True, key="learn_to_experiment"):
+        go("experiment")
+    if learn_c2.button("🎯 挑戦", use_container_width=True, key="learn_to_challenge"):
+        go("challenge")
 
     completed = set(st.session_state.completed_lessons)
     total = len(LESSONS)

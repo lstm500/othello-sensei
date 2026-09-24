@@ -88,6 +88,34 @@ div.stButton > button {border-radius:14px; min-height:50px; font-weight:700;}
         font-size:1.02rem;
     }
 }
+.lesson-head {
+    border:1px solid rgba(128,128,128,.35);
+    border-radius:18px;
+    padding:16px 16px 12px;
+    margin:.4rem 0 1rem;
+    background:rgba(255,255,255,.04);
+}
+.lesson-stage {font-size:.9rem; color:#777; font-weight:700; margin-bottom:.25rem;}
+.lesson-title {font-size:1.45rem; font-weight:800; line-height:1.35;}
+.lesson-goal {font-size:1.02rem; line-height:1.65; margin-top:.65rem;}
+.lesson-point {
+    border-left:5px solid #f2c94c;
+    padding:.7rem .9rem;
+    margin:.7rem 0;
+    border-radius:8px;
+    background:rgba(242,201,76,.08);
+    font-size:1.08rem;
+    line-height:1.7;
+}
+.lesson-seq {
+    font-size:1.12rem;
+    font-weight:800;
+    text-align:center;
+    padding:.7rem;
+    border-radius:12px;
+    background:rgba(128,128,128,.10);
+    margin:.65rem 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -515,27 +543,451 @@ def render_board(board, recommended=None, legal=None, size=720):
 # -----------------------------
 # 学習コンテンツ
 # -----------------------------
+# 6歳児が「1授業 = 1つの考え方」で進められるように、
+# ルール → 序盤の考え方 → 定石の入口 → 名前のある定石 → 上級、の順にする。
+# 定石は丸暗記を目的にせず、「同じ序盤でも形が分かれる」ことを理解する教材として扱う。
+LESSON_STAGES = [
+    {
+        "id": "stage1",
+        "title": "ステージ1　はじめのきほん",
+        "short": "ルールと、いちばん大事な場所",
+        "level": "初歩",
+        "lesson_ids": ["01", "02", "03", "04"],
+    },
+    {
+        "id": "stage2",
+        "title": "ステージ2　序盤の考え方",
+        "short": "石の数より、つぎの動き",
+        "level": "初級",
+        "lesson_ids": ["05", "06", "07", "08"],
+    },
+    {
+        "id": "stage3",
+        "title": "ステージ3　定石の入口",
+        "short": "最初の2手でできる3つの形",
+        "level": "初中級",
+        "lesson_ids": ["09", "10", "11", "12"],
+    },
+    {
+        "id": "stage4",
+        "title": "ステージ4　名前のある定石",
+        "short": "タイガー・キャット・イタリアン・バッファロー",
+        "level": "中級",
+        "lesson_ids": ["13", "14", "15", "16"],
+    },
+    {
+        "id": "stage5",
+        "title": "ステージ5　中盤から終盤へ",
+        "short": "安定石・静かな手・パリティ・読み切り",
+        "level": "上級",
+        "lesson_ids": ["17", "18", "19", "20"],
+    },
+]
+
 LESSONS = {
-    "レベル1 はじめて": [
-        ("① まずは『おける場所』を見つけよう", "じぶんの石で、あいての石を はさめるところに おけるよ。たて・よこ・ななめを見よう。"),
-        ("② かどは とても強い", "4つの かどは、いちど取ると ひっくり返されないよ。かどが取れるなら、大きなチャンス。"),
-        ("③ たくさん取ればいい、ではない", "はじめのころは、いっぺんに たくさん取るより、つぎに動きやすい手が強いことがあるよ。"),
-        ("④ かどのすぐ近くは気をつける", "かどが空いているとき、そのすぐ近くにおくと、あいてに かどをあげてしまうことがあるよ。"),
-    ],
-    "レベル2 つよくなる": [
-        ("① あいての『おける場所』をへらす", "あいてが たくさんの場所におけると、好きな手をえらばれやすいよ。おける場所を少なくすると戦いやすい。"),
-        ("② はしは強いけれど、いつでも安全ではない", "はしの石は動きにくいけれど、かどが空いていると危ないこともあるよ。かどとのつながりを見よう。"),
-        ("③ 外に出すぎない", "空いているマスのとなりに、自分の石がたくさん出ると、あいてにひっくり返されやすくなるよ。"),
-        ("④ 次の次を考える", "『ここにおく→あいてがここ→そのあと自分は？』まで考えると、ぐっと強くなるよ。"),
-    ],
-    "レベル3 もっと強く": [
-        ("① 静かな手を使う", "取る石が少なくても、あいての選べる手をへらせるなら、とても強い手になるよ。"),
-        ("② 安定した石を増やす", "かどからつながった石など、もう返されない石を少しずつ増やそう。"),
-        ("③ 終盤は石の数が大事になる", "さいごが近くなったら、途中の形だけでなく、最後に何個のこるかを数えることが大切だよ。"),
-        ("④ 手番の順番も考える", "空きマスが少なくなると、『どちらが最後におくか』が大きく効くことがあるよ。"),
-    ],
+    "01": {
+        "title": "はさめる場所におこう",
+        "goal": "どこに石をおけるか、自分で見つけられるようになる。",
+        "teach": [
+            "じぶんの石と石で、あいての石を はさめる場所にだけ おけるよ。",
+            "たて・よこ・ななめ。どの向きでも、1こ以上 はさめればOK。",
+            "まずは『ここにおいたら、どの石をはさめる？』と考えよう。",
+        ],
+        "remember": "合言葉は『はさめる？』",
+        "board": "initial",
+        "quiz": {
+            "q": "あいての石を1こも はさめない場所には、おける？",
+            "options": ["おける", "おけない"],
+            "answer": "おけない",
+            "why": "オセロは、1こ以上の石をはさんで返せる場所にだけおけるよ。",
+        },
+    },
+    "02": {
+        "title": "かどは とくべつ",
+        "goal": "4つの角が、どうして強いか説明できる。",
+        "teach": [
+            "かどの石は、となりが2方向しかないから、いちど取ると もう返されないよ。",
+            "だから、かどを取れるときは とても大きなチャンス。",
+            "でも『かどを取りたい』だけでなく、あいてにかどを渡さないことも大事。",
+        ],
+        "remember": "かどは『もう返らない石』。",
+        "highlight": {"safe": [(0,0),(0,7),(7,0),(7,7)]},
+        "quiz": {
+            "q": "いちど取った『かど』の石は、あとで返される？",
+            "options": ["返される", "返されない"],
+            "answer": "返されない",
+            "why": "角の外側にはマスがないので、相手に両側からはさまれないよ。",
+        },
+    },
+    "03": {
+        "title": "かどの近くは あぶないことがある",
+        "goal": "Xマス・Cマスを、かどが空いているときに警戒できる。",
+        "teach": [
+            "かどのななめ内側を Xマス、かどの横・下を Cマス とよぶよ。",
+            "かどが空いているときに、ここへ早くおくと、あいてに かどを取られやすくなることがある。",
+            "いつでもダメではないよ。『かどが空いている？』を先に見るのがポイント。",
+        ],
+        "remember": "X・Cを見る前に『かどは空いてる？』",
+        "highlight": {
+            "danger": [(1,1),(1,6),(6,1),(6,6),(0,1),(1,0),(0,6),(1,7),(6,0),(7,1),(6,7),(7,6)],
+            "safe": [(0,0),(0,7),(7,0),(7,7)],
+        },
+        "quiz": {
+            "q": "かどが空いているとき、XマスやCマスは？",
+            "options": ["すぐおく", "まず注意する"],
+            "answer": "まず注意する",
+            "why": "相手に角を取らせるきっかけになることがあるから、先を見てからおこう。",
+        },
+    },
+    "04": {
+        "title": "たくさん取る手が、いつも一番ではない",
+        "goal": "序盤は『今の石数』だけで手を選ばない。",
+        "teach": [
+            "ゲームのはじめは、石が多いほうが勝ちとはかぎらないよ。",
+            "たくさん返すと、自分の石が外へ広がって、相手がおける場所を増やすことがある。",
+            "『何こ取れる？』の次に、『相手はどこへおける？』も見よう。",
+        ],
+        "remember": "序盤は『石の数』より『つぎの動き』。",
+        "quiz": {
+            "q": "ゲームのはじめ、いちばん多く返せる手を いつも選べばいい？",
+            "options": ["いつも選ぶ", "ほかも見る"],
+            "answer": "ほかも見る",
+            "why": "相手のおける場所や、角を渡さないかも一緒に考えると強くなるよ。",
+        },
+    },
+    "05": {
+        "title": "外へ広がりすぎない",
+        "goal": "空きマスに接する自分の石を増やしすぎない考え方を知る。",
+        "teach": [
+            "空いているマスのとなりにある石は、これから返されやすい石だよ。",
+            "自分の石が外へ大きく広がりすぎると、相手が使える場所が増えやすい。",
+            "序盤は、盤の中のほうに小さくまとまる形も大切。",
+        ],
+        "remember": "外へ出しすぎず、形を小さく。",
+        "quiz": {
+            "q": "序盤に自分の石が外へどんどん広がると？",
+            "options": ["相手の手が増えやすい", "必ず勝てる"],
+            "answer": "相手の手が増えやすい",
+            "why": "空きマスの近くに自分の石が増えるほど、相手がはさめる場所も増えやすいよ。",
+        },
+    },
+    "06": {
+        "title": "あいての『おける場所』をへらそう",
+        "goal": "モビリティ（合法手の数）の考え方を使える。",
+        "teach": [
+            "相手がおける場所が10こあるのと、2こしかないのでは、2このほうが相手はこまるよ。",
+            "この『おける場所の数』を、むずかしい言葉で モビリティ というよ。",
+            "強い手を探すときは、打ったあとに『相手は何か所？』を数えてみよう。",
+        ],
+        "remember": "相手のえらべる手を少なくする。",
+        "quiz": {
+            "q": "相手のおける場所は、どちらがうれしい？",
+            "options": ["2か所", "10か所"],
+            "answer": "2か所",
+            "why": "選べる手が少ないほど、相手は好きな作戦をとりにくくなるよ。",
+        },
+    },
+    "07": {
+        "title": "へんは、かどとセットで考える",
+        "goal": "辺に石を置く前に、角との関係を見る。",
+        "teach": [
+            "盤のはし（辺）は、まんなかより返されにくいことがある。",
+            "でも、かどが空いている辺は、打ち方によって相手へ角を渡すこともある。",
+            "『辺だから強い』ではなく、『この辺は角とどうつながる？』と見るよ。",
+        ],
+        "remember": "へんを見るときは、近くのかども見る。",
+        "highlight": {"focus": [(0,3),(3,0),(7,4),(4,7)], "safe": [(0,0),(0,7),(7,0),(7,7)]},
+        "quiz": {
+            "q": "辺におけるなら、いつでも安全？",
+            "options": ["いつでも安全", "角との関係を見る"],
+            "answer": "角との関係を見る",
+            "why": "辺の形しだいで、相手に角を取らせることがあるからだよ。",
+        },
+    },
+    "08": {
+        "title": "つぎのつぎまで見る",
+        "goal": "自分→相手→自分の3手を順番に考える。",
+        "teach": [
+            "まず『ここにおく』。その次に『相手はどこへおく？』。最後に『自分はそのあとどこへおく？』。",
+            "1手だけでなく、3つの順番で見ると、ワナに気づきやすくなる。",
+            "全部の手を読む必要はないよ。角やXマスが関係するときだけでも、3手見る習慣をつけよう。",
+        ],
+        "remember": "じぶん → あいて → じぶん。",
+        "quiz": {
+            "q": "『つぎのつぎ』を見る順番は？",
+            "options": ["じぶん→あいて→じぶん", "じぶん→じぶん→あいて"],
+            "answer": "じぶん→あいて→じぶん",
+            "why": "オセロは交代で打つので、相手の返しをはさんで考えるよ。",
+        },
+    },
+    "09": {
+        "title": "定石は F5 から覚える",
+        "goal": "最初の4か所は対称で、定石ではF5を代表にすることを知る。",
+        "teach": [
+            "黒の1手目は C4・D3・E6・F5 の4か所。形は回すと同じだよ。",
+            "定石を勉強するときは、同じ形を何回も覚えなくてよいように F5 から始めることが多い。",
+            "ここから白の返し方で、3つの大きな入口に分かれるよ。",
+        ],
+        "remember": "最初は4か所とも同じ形。勉強では F5 を代表にする。",
+        "sequence": ["F5"],
+        "sequence_name": "黒 F5",
+        "quiz": {
+            "q": "黒の最初の4か所は、強さがぜんぶ違う？",
+            "options": ["形は同じ", "ぜんぶ違う"],
+            "answer": "形は同じ",
+            "why": "盤を回して見ると同じ形になるので、定石ではF5を代表にして覚えられるよ。",
+        },
+    },
+    "10": {
+        "title": "垂直型（Perpendicular）",
+        "goal": "F5 → D6 の形を見て、垂直型の入口を覚える。",
+        "teach": [
+            "黒 F5 のあと、白 D6 と打つ形を Perpendicular（垂直型）というよ。",
+            "ここからタイガー・キャット・イタリアンなど、たくさんの定石へ分かれていく。",
+            "まずは名前より、『F5のあと白がD6』という形を見て覚えよう。",
+        ],
+        "remember": "F5 → D6 ＝ 垂直型。",
+        "sequence": ["F5", "D6"],
+        "sequence_name": "垂直型　F5 → D6",
+        "quiz": {
+            "q": "F5 → D6 は、どの入口？",
+            "options": ["垂直型", "平行型", "斜め型"],
+            "answer": "垂直型",
+            "why": "この2手が Perpendicular（垂直型）の基本形だよ。",
+        },
+    },
+    "11": {
+        "title": "平行型（Parallel）",
+        "goal": "F5 → F4 の形を見て、平行型の入口を覚える。",
+        "teach": [
+            "黒 F5 のあと、白 F4 と打つ形を Parallel（平行型）というよ。",
+            "垂直型とは盤の形がちがうので、そのあとにできる定石も変わる。",
+            "まずは『F5の上にF4がならぶ』形として覚えよう。",
+        ],
+        "remember": "F5 → F4 ＝ 平行型。",
+        "sequence": ["F5", "F4"],
+        "sequence_name": "平行型　F5 → F4",
+        "quiz": {
+            "q": "F5 → F4 は、どの入口？",
+            "options": ["平行型", "垂直型", "斜め型"],
+            "answer": "平行型",
+            "why": "この2手が Parallel（平行型）の基本形だよ。",
+        },
+    },
+    "12": {
+        "title": "斜め型（Diagonal）",
+        "goal": "F5 → F6 の形を見て、斜め型の入口を覚える。",
+        "teach": [
+            "黒 F5 のあと、白 F6 と打つ形を Diagonal（斜め型）というよ。",
+            "この入口から、バッファローなどの名前のある定石へ進むことができる。",
+            "3つの入口を見分けられれば、定石の地図がかなり見やすくなるよ。",
+        ],
+        "remember": "F5 → F6 ＝ 斜め型。",
+        "sequence": ["F5", "F6"],
+        "sequence_name": "斜め型　F5 → F6",
+        "quiz": {
+            "q": "F5 → F6 は、どの入口？",
+            "options": ["斜め型", "平行型", "垂直型"],
+            "answer": "斜め型",
+            "why": "この2手が Diagonal（斜め型）の基本形だよ。",
+        },
+    },
+    "13": {
+        "title": "タイガー定石",
+        "goal": "垂直型からタイガーへ進む5手を、盤の形で見られる。",
+        "teach": [
+            "タイガーは、垂直型 F5 → D6 から始まる名前のある定石だよ。",
+            "手順は F5 → D6 → C3 → D3 → C4。",
+            "丸暗記だけでなく、最後のC4まで打ったときに『どちらの石が外へ出ているか』も見よう。",
+        ],
+        "remember": "タイガー：F5 → D6 → C3 → D3 → C4",
+        "sequence": ["F5", "D6", "C3", "D3", "C4"],
+        "sequence_name": "Tiger　F5 → D6 → C3 → D3 → C4",
+        "quiz": {
+            "q": "タイガーは、最初の2手ではどの入口？",
+            "options": ["垂直型", "平行型", "斜め型"],
+            "answer": "垂直型",
+            "why": "最初が F5 → D6 なので、垂直型から分かれる定石だよ。",
+        },
+    },
+    "14": {
+        "title": "キャット定石",
+        "goal": "タイガーと違う、垂直型の別ルートを見比べる。",
+        "teach": [
+            "キャットも、最初は F5 → D6 の垂直型。",
+            "手順は F5 → D6 → C4 → D3 → C5。",
+            "タイガーと3手目がちがうね。定石は『途中の分かれ道』を見ると覚えやすいよ。",
+        ],
+        "remember": "キャット：F5 → D6 → C4 → D3 → C5",
+        "sequence": ["F5", "D6", "C4", "D3", "C5"],
+        "sequence_name": "Cat　F5 → D6 → C4 → D3 → C5",
+        "quiz": {
+            "q": "タイガーとキャットが最初に分かれるのは？",
+            "options": ["3手目", "1手目"],
+            "answer": "3手目",
+            "why": "どちらも F5 → D6 まで同じで、3手目が C3 と C4 に分かれるよ。",
+        },
+    },
+    "15": {
+        "title": "イタリアン定石",
+        "goal": "キャットと途中まで同じ定石を見比べる。",
+        "teach": [
+            "イタリアンは F5 → D6 → C4 → D3 までキャットと同じ。",
+            "5手目を E6 と打つとイタリアン、C5 と打つとキャットになる。",
+            "『同じ4手から、5手目で別の名前になる』という定石の枝分かれを見よう。",
+        ],
+        "remember": "イタリアン：F5 → D6 → C4 → D3 → E6",
+        "sequence": ["F5", "D6", "C4", "D3", "E6"],
+        "sequence_name": "Italian　F5 → D6 → C4 → D3 → E6",
+        "quiz": {
+            "q": "F5 → D6 → C4 → D3 のあと、E6なら？",
+            "options": ["イタリアン", "キャット"],
+            "answer": "イタリアン",
+            "why": "同じ4手から、E6ならイタリアン、C5ならキャットに分かれるよ。",
+        },
+    },
+    "16": {
+        "title": "バッファロー定石",
+        "goal": "斜め型から始まる定石を1つ覚える。",
+        "teach": [
+            "バッファローは、F5 → F6 の斜め型から始まる定石だよ。",
+            "手順は F5 → F6 → E6 → D6 → C3。",
+            "垂直型のタイガーたちと比べると、最初の2手から盤の形がちがうことがわかる。",
+        ],
+        "remember": "バッファロー：F5 → F6 → E6 → D6 → C3",
+        "sequence": ["F5", "F6", "E6", "D6", "C3"],
+        "sequence_name": "Buffalo　F5 → F6 → E6 → D6 → C3",
+        "quiz": {
+            "q": "バッファローは、最初の2手ではどの入口？",
+            "options": ["斜め型", "垂直型", "平行型"],
+            "answer": "斜め型",
+            "why": "最初が F5 → F6 なので、斜め型から始まるよ。",
+        },
+    },
+    "17": {
+        "title": "安定石をつなげる",
+        "goal": "もう返されない石を、角から増やす考え方を知る。",
+        "teach": [
+            "角は安定石。そこから辺にそって、もう返されない石がつながることがある。",
+            "終盤では『今何こある？』より『最後まで残る石は何こ？』を見る。",
+            "角を取ったあとも、角からつながる石を少しずつ増やせるか考えよう。",
+        ],
+        "remember": "角から『返らない石』をつなげる。",
+        "highlight": {"safe": [(0,0),(0,1),(0,2),(1,0),(2,0)]},
+        "quiz": {
+            "q": "角からつながって、もう返されない石は？",
+            "options": ["安定石", "空きマス"],
+            "answer": "安定石",
+            "why": "相手がもう返せない石は、最後まで自分の石として残るよ。",
+        },
+    },
+    "18": {
+        "title": "静かな手を見つける",
+        "goal": "少なく返す手でも強い理由を説明できる。",
+        "teach": [
+            "1こしか返さない手でも、相手のおける場所を大きく減らせるなら強いことがある。",
+            "こういう目立たない手を、ここでは『静かな手』として覚えよう。",
+            "見る順番は『返す数 → 相手の手の数 → 角を渡さないか』。",
+        ],
+        "remember": "少なく返して、相手の手も少なく。",
+        "quiz": {
+            "q": "1こしか返さない手は、必ず弱い？",
+            "options": ["必ず弱い", "強いこともある"],
+            "answer": "強いこともある",
+            "why": "相手の選択肢を減らせるなら、返す石が少なくても価値が高いよ。",
+        },
+    },
+    "19": {
+        "title": "終盤のパリティ（ぐうすう・きすう）",
+        "goal": "空きマスの数と最後の1手の関係を知る。",
+        "teach": [
+            "終盤は、空きマスがまとまりごとに何こあるかを見ることがある。",
+            "2・4・6のような偶数か、1・3・5のような奇数かで、最後に打てる側が変わりやすい。",
+            "6歳ではまず『空きマスを数えると、最後の順番が見える』までわかれば十分。",
+        ],
+        "remember": "終盤は、空きマスの数も作戦になる。",
+        "quiz": {
+            "q": "終盤で数えると役立つものは？",
+            "options": ["空きマス", "盤の色"],
+            "answer": "空きマス",
+            "why": "空きマスの数で、どちらが最後に打ちやすいか考えられるよ。",
+        },
+    },
+    "20": {
+        "title": "最後は読み切る",
+        "goal": "空きが少なくなったら、最後まで順番に読む習慣をつける。",
+        "teach": [
+            "空きがたくさんある序盤は、全部読むのはむずかしい。",
+            "でも空きが6こ、4こ、2こと少なくなったら、最後まで全部の手を試しやすくなる。",
+            "上級者は『今よさそう』ではなく、『最後に何こ残る？』で手をくらべるよ。",
+        ],
+        "remember": "空きが少なくなったら、最後まで読む。",
+        "quiz": {
+            "q": "空きが4こくらいなら、どうする？",
+            "options": ["最後まで読んでみる", "今の石だけ数える"],
+            "answer": "最後まで読んでみる",
+            "why": "終盤は手の候補が少ないので、最後まで読むほど正確に選べるよ。",
+        },
+    },
 }
 
+
+def board_from_sequence(sequence):
+    """F5, D6... の定石表記から盤面を作る。黒から交互に打つ。"""
+    board = initial_board()
+    player = BLACK
+    last = None
+    for text_move in sequence:
+        col = COLS.index(text_move[0].upper())
+        row = int(text_move[1:]) - 1
+        move = (row, col)
+        flips = flips_for_move(board, player, row, col)
+        if not flips:
+            break
+        board = apply_move(board, player, move, flips)
+        last = move
+        player = -player
+    return board, last
+
+
+def render_teaching_board(board=None, focus=None, danger=None, safe=None, size=650):
+    """授業用。注目マス・注意マス・安全マスを盤上で囲む。"""
+    if board is None:
+        board = initial_board()
+    img = render_board(board, size=size)
+    draw = ImageDraw.Draw(img)
+    margin = 58
+    board_size = size - margin - 10
+    cell = board_size / 8
+
+    def outline_cells(cells, color, width=6):
+        for r, c in cells or []:
+            x0 = margin + c * cell + 4
+            y0 = 8 + r * cell + 4
+            x1 = margin + (c + 1) * cell - 4
+            y1 = 8 + (r + 1) * cell - 4
+            draw.rounded_rectangle([x0, y0, x1, y1], radius=8, outline=color, width=width)
+
+    outline_cells(safe, (65, 175, 95), 7)
+    outline_cells(danger, (220, 75, 75), 7)
+    outline_cells(focus, (245, 200, 55), 7)
+    return img
+
+
+def stage_for_lesson(lesson_id):
+    for stage in LESSON_STAGES:
+        if lesson_id in stage["lesson_ids"]:
+            return stage
+    return LESSON_STAGES[0]
+
+
+def next_lesson_id(lesson_id):
+    ids = list(LESSONS.keys())
+    try:
+        idx = ids.index(lesson_id)
+    except ValueError:
+        return None
+    return ids[idx + 1] if idx + 1 < len(ids) else None
 
 # -----------------------------
 # セッション状態
@@ -548,6 +1000,10 @@ if "photo_processed" not in st.session_state:
     st.session_state.photo_processed = None
 if "recognition_note" not in st.session_state:
     st.session_state.recognition_note = ""
+if "current_lesson" not in st.session_state:
+    st.session_state.current_lesson = "01"
+if "completed_lessons" not in st.session_state:
+    st.session_state.completed_lessons = []
 
 
 def go(page):
@@ -599,7 +1055,7 @@ if st.session_state.page == "home":
         st.caption("※ カメラ欄に『This app would like to use your camera』と出る場合は、アプリではなくブラウザ側のカメラ権限が止まっています。")
 
     st.markdown("---")
-    if st.button("📘 オセロを学ぶ", use_container_width=True, type="secondary"):
+    if st.button("📘 オセロを学ぶ（授業）", use_container_width=True, type="secondary"):
         go("learn")
 
     with st.expander("写真なしで試す"):
@@ -698,33 +1154,150 @@ elif st.session_state.page == "result":
     if c1.button("📷 つぎの盤面を撮る", use_container_width=True, type="primary"):
         st.session_state.photo_processed = None
         go("home")
-    if c2.button("📘 オセロを学ぶ", use_container_width=True):
+    if c2.button("📘 オセロを学ぶ（授業）", use_container_width=True):
         go("learn")
 
 
 # -----------------------------
-# UI: 学習
+# UI: 学習（授業一覧）
 # -----------------------------
 elif st.session_state.page == "learn":
-    if st.button("← もどる"):
+    if st.button("← ホームへ"):
         go("home")
 
     st.markdown("### 📘 オセロを学ぶ")
-    st.write("むずかしさを えらんでね。")
-    level = st.radio("レベル", list(LESSONS.keys()), horizontal=False, label_visibility="collapsed")
+    st.caption("1つずつ授業をえらんで、初歩から上級まで順番に進めます。定石は『丸暗記』ではなく、盤の形を見比べながら学びます。")
 
-    for title, body in LESSONS[level]:
-        with st.expander(title, expanded=True):
-            st.markdown(f"<div class='kid-text' style='text-align:left'>{body}</div>", unsafe_allow_html=True)
+    completed = set(st.session_state.completed_lessons)
+    total = len(LESSONS)
+    done = len(completed)
+    st.progress(done / total if total else 0.0)
+    st.caption(f"すすみぐあい：{done} / {total} 授業")
+
+    for i, stage in enumerate(LESSON_STAGES):
+        stage_done = sum(1 for lesson_id in stage["lesson_ids"] if lesson_id in completed)
+        expanded = (i == 0 and done == 0) or (0 < stage_done < len(stage["lesson_ids"]))
+        with st.expander(
+            f"{stage['title']}　{stage_done}/{len(stage['lesson_ids'])}",
+            expanded=expanded,
+        ):
+            st.caption(f"{stage['level']}｜{stage['short']}")
+            for lesson_id in stage["lesson_ids"]:
+                lesson = LESSONS[lesson_id]
+                mark = "✅" if lesson_id in completed else "▶"
+                if st.button(
+                    f"{mark} {lesson_id}. {lesson['title']}",
+                    use_container_width=True,
+                    key=f"open_lesson_{lesson_id}",
+                ):
+                    st.session_state.current_lesson = lesson_id
+                    go("lesson")
 
     st.markdown("---")
-    st.markdown("### きょうの おぼえかた")
-    if level.startswith("レベル1"):
-        st.info("① かどをさがす → ② かどの近くに気をつける → ③ たくさん取りすぎない")
-    elif level.startswith("レベル2"):
-        st.info("① あいてのおける場所を数える → ② 次の次まで考える → ③ はしとかどの関係を見る")
-    else:
-        st.info("① 静かな手 → ② 安定した石 → ③ 終盤の手順と最後の石数")
-
-    if st.button("📷 盤面を撮ってやってみる", use_container_width=True, type="primary"):
+    st.caption("※ 定石名は代表的なオセロのオープニング名称です。『この順なら必ず勝つ』という意味ではありません。")
+    if st.button("📷 盤面を撮って実戦で試す", use_container_width=True, type="primary"):
         go("home")
+
+
+# -----------------------------
+# UI: 1つの授業
+# -----------------------------
+elif st.session_state.page == "lesson":
+    lesson_id = st.session_state.get("current_lesson", "01")
+    lesson = LESSONS.get(lesson_id, LESSONS["01"])
+    stage = stage_for_lesson(lesson_id)
+
+    top1, top2 = st.columns(2)
+    if top1.button("← 授業一覧", use_container_width=True):
+        go("learn")
+    if top2.button("📷 実戦へ", use_container_width=True):
+        go("home")
+
+    header_html = (
+        '<div class="lesson-head">'
+        f'<div class="lesson-stage">{stage["title"]}｜授業 {lesson_id}</div>'
+        f'<div class="lesson-title">{lesson["title"]}</div>'
+        f'<div class="lesson-goal"><b>きょうのゴール：</b>{lesson["goal"]}</div>'
+        '</div>'
+    )
+    st.markdown(header_html, unsafe_allow_html=True)
+
+    st.markdown("#### せんせいの説明")
+    for line in lesson["teach"]:
+        st.markdown(f"- {line}")
+
+    if lesson.get("sequence"):
+        lesson_board, last = board_from_sequence(lesson["sequence"])
+        seq_text = lesson.get("sequence_name", " → ".join(lesson["sequence"]))
+        st.markdown(f'<div class="lesson-seq">{seq_text}</div>', unsafe_allow_html=True)
+        st.image(render_teaching_board(lesson_board, focus=[last] if last else None), use_container_width=True)
+        st.caption("黄色のマスが、この手順で最後に打った場所です。黒から交互に打っています。")
+    elif lesson.get("highlight"):
+        h = lesson["highlight"]
+        st.image(
+            render_teaching_board(
+                initial_board(),
+                focus=h.get("focus"),
+                danger=h.get("danger"),
+                safe=h.get("safe"),
+            ),
+            use_container_width=True,
+        )
+        legend = []
+        if h.get("safe"):
+            legend.append("緑＝大事・安全の例")
+        if h.get("danger"):
+            legend.append("赤＝注意する場所")
+        if h.get("focus"):
+            legend.append("黄＝見てほしい場所")
+        if legend:
+            st.caption(" / ".join(legend))
+    elif lesson.get("board") == "initial":
+        st.image(render_board(initial_board(), legal=legal_moves(initial_board(), BLACK).keys()), use_container_width=True)
+        st.caption("黄色い点が、黒が最初における4か所です。")
+
+    st.markdown(f'<div class="lesson-point"><b>これだけ覚える：</b><br>{lesson["remember"]}</div>', unsafe_allow_html=True)
+
+    st.markdown("#### やってみよう")
+    quiz = lesson["quiz"]
+    choice = st.radio(
+        quiz["q"],
+        quiz["options"],
+        index=None,
+        key=f"quiz_choice_{lesson_id}",
+    )
+    show_key = f"quiz_show_{lesson_id}"
+    if show_key not in st.session_state:
+        st.session_state[show_key] = False
+
+    if st.button("こたえを見る", use_container_width=True, key=f"quiz_btn_{lesson_id}"):
+        st.session_state[show_key] = True
+
+    if st.session_state[show_key]:
+        if choice is None:
+            st.info("まず、こたえを1つえらんでね。")
+        elif choice == quiz["answer"]:
+            st.success(f"せいかい！　{quiz['why']}")
+        else:
+            st.warning(f"もう一度見てみよう。こたえは『{quiz['answer']}』。{quiz['why']}")
+
+    st.markdown("---")
+    next_id = next_lesson_id(lesson_id)
+    finish_label = "✅ この授業をおわる"
+    if lesson_id in st.session_state.completed_lessons:
+        finish_label = "✅ この授業はクリアずみ"
+
+    if st.button(finish_label, use_container_width=True, type="primary", key=f"finish_{lesson_id}"):
+        if lesson_id not in st.session_state.completed_lessons:
+            st.session_state.completed_lessons.append(lesson_id)
+        if next_id:
+            st.session_state.current_lesson = next_id
+            st.rerun()
+        else:
+            st.success("全20授業クリア！　実戦の盤面で、考え方を使ってみよう。")
+
+    if next_id:
+        if st.button(f"次の授業へ　→ {next_id}. {LESSONS[next_id]['title']}", use_container_width=True, key=f"next_{lesson_id}"):
+            st.session_state.current_lesson = next_id
+            st.rerun()
+

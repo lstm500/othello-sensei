@@ -23,232 +23,283 @@ except Exception:
 st.set_page_config(page_title="オセロせんせい", page_icon="⚫", layout="centered")
 
 # -----------------------------
-# スマホ背面カメラ（Streamlit Components v2）
+# ライブカメラ（東京ぶらり旅と同系統の実装）
 # -----------------------------
-# Streamlit 標準 camera_input は初期カメラを指定できないため、ホームの主カメラは
-# ブラウザの getUserMedia() を直接使う。最初に facingMode=environment を厳密指定し、
-# 失敗時だけ段階的にフォールバックする。撮影画像は data URL で Python 側へ返す。
-REAR_CAMERA_COMPONENT_AVAILABLE = hasattr(st.components, "v2")
-REAR_CAMERA_COMPONENT = None
-if REAR_CAMERA_COMPONENT_AVAILABLE:
-    REAR_CAMERA_COMPONENT = st.components.v2.component(
-        name="othello_rear_camera",
+# 東京ぶらり旅と同じ考え方で、ブラウザの getUserMedia() を直接使う。
+# 初期値は必ず environment（背面）。exact 指定は使わず ideal 指定にして、
+# Android/Chrome が実際に利用できる背面カメラへ自然にフォールバックできるようにする。
+LIVE_CAMERA_COMPONENT_AVAILABLE = hasattr(st.components, "v2")
+LIVE_CAMERA_COMPONENT = None
+if LIVE_CAMERA_COMPONENT_AVAILABLE:
+    LIVE_CAMERA_COMPONENT = st.components.v2.component(
+        name="othello_live_camera_burari_style_v1",
         html="""
         <div class="camera-shell">
-          <div class="video-wrap">
+          <div id="cameraPreview" class="camera-preview is-hidden">
             <video id="cameraVideo" autoplay playsinline muted></video>
-            <div id="cameraBadge" class="badge">外向きカメラを準備中…</div>
           </div>
-          <div id="cameraStatus" class="status">カメラへのアクセスを許可してください。</div>
+          <div id="cameraStatus" class="camera-status">外側カメラで盤面を撮影します。</div>
           <div class="camera-actions">
-            <button id="captureBtn" class="capture" type="button">📷 この盤面を撮る</button>
-            <button id="switchBtn" class="switch" type="button">↻ カメラ切替</button>
-            <button id="retryBtn" class="retry" type="button">カメラを開く</button>
+            <button id="cameraOpen" class="camera-primary" type="button">📷 カメラを開く</button>
+            <button id="cameraShoot" class="camera-primary" type="button" disabled>● この盤面を撮る</button>
+            <button id="cameraSwitch" class="camera-secondary" type="button" disabled>↻ カメラ切替</button>
+            <button id="cameraClose" class="camera-secondary" type="button" disabled>カメラを閉じる</button>
           </div>
-          <canvas id="captureCanvas" hidden></canvas>
+          <details id="cameraDebugPanel" class="camera-debug">
+            <summary>カメラエラーログ</summary>
+            <pre id="cameraDebugLog">エラーはまだありません。</pre>
+          </details>
+          <canvas id="cameraCanvas" hidden></canvas>
         </div>
         """,
         css="""
         .camera-shell {
-          width: 100%; box-sizing: border-box; font-family: var(--st-font);
-          color: #111; background: #fff; border: 1px solid #cfd5ce;
-          border-radius: 18px; padding: 10px; box-shadow: 0 8px 24px rgba(17,17,17,.07);
+          width:100%; box-sizing:border-box; font-family:var(--st-font);
+          color:#111; background:#fff; border:1px solid #d9dedb;
+          border-radius:18px; padding:14px; box-shadow:0 8px 24px rgba(17,17,17,.06);
         }
-        .video-wrap { position: relative; width: 100%; overflow: hidden; border-radius: 14px; background: #111; aspect-ratio: 4 / 3; }
-        #cameraVideo { width: 100%; height: 100%; object-fit: cover; display: block; background: #111; }
-        .badge { position: absolute; left: 10px; top: 10px; background: rgba(17,17,17,.78); color:#fff; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800; }
-        .status { margin: 9px 2px 8px; font-size: 13px; color:#4f5b54; line-height:1.45; }
-        .camera-actions { display:grid; grid-template-columns: 1fr auto; gap:8px; }
-        button { min-height: 50px; border-radius: 14px; font-weight: 850; cursor:pointer; font-size: 15px; }
-        .capture { background:#111; color:#fff; border:1px solid #111; }
-        .switch, .retry { background:#fff; color:#111; border:1px solid #b9c2bc; }
-        .retry { grid-column: 1 / -1; display:none; }
-        button:disabled { opacity:.5; cursor:default; }
+        .camera-preview {
+          width:100%; background:#111; border-radius:16px; overflow:hidden;
+          aspect-ratio:3/4; display:flex; align-items:center; justify-content:center;
+        }
+        .camera-preview.is-hidden { display:none; }
+        .camera-preview video {
+          display:block; width:100%; height:100%; object-fit:cover; background:#111;
+        }
+        .camera-preview video.front-facing { transform:scaleX(-1); }
+        .camera-status {
+          margin:10px 2px 0; font-size:14px; line-height:1.55; color:#505a54;
+        }
+        .camera-actions {
+          display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:12px;
+        }
+        .camera-actions button {
+          min-height:54px; border-radius:14px; font-size:15px; font-weight:900; cursor:pointer;
+        }
+        .camera-primary { background:#111; color:#fff; border:1px solid #111; }
+        .camera-secondary { background:#fff; color:#111; border:1px solid #cfd5d2; }
+        .camera-actions button:disabled { opacity:.42; cursor:not-allowed; }
+        .camera-debug {
+          margin-top:10px; border:1px solid #d9dedb; border-radius:12px;
+          padding:8px 10px; background:#fafbfa; text-align:left;
+        }
+        .camera-debug summary { cursor:pointer; font-weight:800; color:#111; }
+        .camera-debug pre {
+          white-space:pre-wrap; word-break:break-word; margin:9px 0 2px;
+          font-size:11px; line-height:1.45; color:#202522;
+        }
         @media (max-width:520px) {
-          .camera-actions { grid-template-columns: 1fr; }
-          .switch, .retry { width:100%; }
+          .camera-shell { padding:11px; }
+          .camera-actions { grid-template-columns:1fr; }
+          .camera-actions button { min-height:58px; font-size:16px; }
         }
         """,
         js=r"""
         export default function({ parentElement, setTriggerValue }) {
+          const preview = parentElement.querySelector('#cameraPreview');
           const video = parentElement.querySelector('#cameraVideo');
-          const canvas = parentElement.querySelector('#captureCanvas');
-          const captureBtn = parentElement.querySelector('#captureBtn');
-          const switchBtn = parentElement.querySelector('#switchBtn');
-          const retryBtn = parentElement.querySelector('#retryBtn');
+          const canvas = parentElement.querySelector('#cameraCanvas');
           const status = parentElement.querySelector('#cameraStatus');
-          const badge = parentElement.querySelector('#cameraBadge');
+          const openBtn = parentElement.querySelector('#cameraOpen');
+          const shootBtn = parentElement.querySelector('#cameraShoot');
+          const switchBtn = parentElement.querySelector('#cameraSwitch');
+          const closeBtn = parentElement.querySelector('#cameraClose');
+          const debugPanel = parentElement.querySelector('#cameraDebugPanel');
+          const debugLog = parentElement.querySelector('#cameraDebugLog');
+          if (!video || video.__othelloCameraBound) return;
+          video.__othelloCameraBound = true;
 
-          if (!parentElement.__othelloCameraState) {
-            parentElement.__othelloCameraState = { stream: null, starting: false, devices: [], currentDeviceId: null };
-          }
-          const state = parentElement.__othelloCameraState;
+          let stream = null;
+          // ぶらり旅と同じく初期値は背面。保存済みの前面設定は読み込まない。
+          let cameraFacing = 'environment';
+          const events = [];
 
-          function stopCurrent() {
-            if (state.stream) {
-              state.stream.getTracks().forEach(t => t.stop());
-              state.stream = null;
+          const now = () => new Date().toISOString();
+          const safeError = (err) => ({
+            name: err?.name || 'CameraError',
+            message: err?.message || String(err || ''),
+            constraint: err?.constraint || null,
+          });
+          const baseDiagnostics = () => ({
+            time: now(),
+            secureContext: window.isSecureContext,
+            visibilityState: document.visibilityState,
+            hasFocus: document.hasFocus(),
+            userAgent: navigator.userAgent,
+            platform: navigator.platform || null,
+            mediaDevices: !!navigator.mediaDevices,
+            getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+            requestedFacing: cameraFacing,
+          });
+          const updateLog = (event, detail={}) => {
+            events.push({time:now(), event, ...detail});
+            debugLog.textContent = JSON.stringify({environment:baseDiagnostics(), events:events.slice(-30)}, null, 2);
+          };
+          const cameraErrorMessage = (err) => {
+            const name = err?.name || '';
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+              return 'カメラが許可されていません。ブラウザのサイト設定でカメラを「許可」にして、ページを再読み込みしてください。';
             }
-            video.srcObject = null;
-          }
-
-          async function refreshDevices() {
+            if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+              return '利用できるカメラが見つかりませんでした。';
+            }
+            if (name === 'NotReadableError' || name === 'TrackStartError') {
+              return 'カメラを開けませんでした。ほかのアプリがカメラを使っていないか確認してください。';
+            }
+            if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+              return '指定したカメラ条件を端末が満たせませんでした。';
+            }
+            if (name === 'SecurityError') {
+              return 'ブラウザのセキュリティ設定でカメラがブロックされています。';
+            }
+            return 'カメラを開けませんでした。下のエラーログを確認してください。';
+          };
+          const stopStream = () => {
             try {
-              const all = await navigator.mediaDevices.enumerateDevices();
-              state.devices = all.filter(d => d.kind === 'videoinput');
-            } catch (e) {
-              state.devices = [];
-            }
-          }
-
-          function describeTrack(stream) {
-            const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
-            if (!track) return { facing: '', deviceId: '', label: '' };
-            const settings = track.getSettings ? track.getSettings() : {};
-            return {
-              facing: settings.facingMode || '',
-              deviceId: settings.deviceId || '',
-              label: track.label || ''
-            };
-          }
-
-          async function requestStream(constraints) {
-            stopCurrent();
-            const stream = await navigator.mediaDevices.getUserMedia({video: constraints, audio: false});
-            state.stream = stream;
-            video.srcObject = stream;
-            await video.play();
-            const info = describeTrack(stream);
-            state.currentDeviceId = info.deviceId || null;
-            await refreshDevices();
-            return info;
-          }
-
-          async function tryRearCamera() {
-            if (state.starting) return;
-            state.starting = true;
-            captureBtn.disabled = true;
+              if (stream) stream.getTracks().forEach(t => t.stop());
+            } catch (_) {}
+            stream = null;
+            video.srcObject = null;
+            preview.classList.add('is-hidden');
+            shootBtn.disabled = true;
             switchBtn.disabled = true;
-            retryBtn.style.display = 'none';
-            status.textContent = '外向きカメラを開いています…';
-            badge.textContent = '外向きカメラを準備中…';
+            closeBtn.disabled = true;
+            openBtn.disabled = false;
+          };
+          const collectDeviceInfo = async () => {
+            try {
+              if (!navigator.mediaDevices?.enumerateDevices) return [];
+              const devices = await navigator.mediaDevices.enumerateDevices();
+              return devices
+                .filter(d => d.kind === 'videoinput')
+                .map((d, i) => ({index:i, label:d.label || '(label unavailable)', deviceIdPresent:!!d.deviceId}));
+            } catch (err) {
+              return [{enumerateDevicesError:safeError(err)}];
+            }
+          };
+          const emitError = async (err) => {
+            const message = cameraErrorMessage(err);
+            const devices = await collectDeviceInfo();
+            const error = safeError(err);
+            updateLog('camera_open_error', {error, devices});
+            status.textContent = message;
+            debugPanel.open = true;
+            setTriggerValue('camera_error', {
+              name:error.name,
+              message,
+              detail:error.message,
+              constraint:error.constraint,
+              diagnostics:baseDiagnostics(),
+              devices,
+              events:events.slice(-30),
+            });
+          };
+          const startCamera = async () => {
+            stopStream();
+            openBtn.disabled = true;
+            status.textContent = cameraFacing === 'environment'
+              ? '外側カメラを開いています…'
+              : '内側カメラを開いています…';
+            updateLog('camera_open_requested', {requestedFacing:cameraFacing});
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-              status.textContent = 'このブラウザではカメラを利用できません。下の「別の方法で撮る」を使ってください。';
-              badge.textContent = 'カメラ利用不可';
-              retryBtn.style.display = 'block';
-              state.starting = false;
+              await emitError({name:'Unsupported', message:'navigator.mediaDevices.getUserMedia is unavailable'});
+              openBtn.disabled = false;
               return;
             }
 
-            let info = null;
-            let lastError = null;
             try {
-              // Android / iPhone で最初から背面カメラを要求する。
-              info = await requestStream({
-                facingMode: { exact: 'environment' },
-                width: { ideal: 1280 },
-                height: { ideal: 960 }
+              // 東京ぶらり旅と同じ考え方：exact ではなく ideal を使う。
+              stream = await navigator.mediaDevices.getUserMedia({
+                audio:false,
+                video:{
+                  facingMode:{ideal:cameraFacing},
+                  height:{ideal:1600},
+                },
               });
-            } catch (e1) {
-              lastError = e1;
-              try {
-                info = await requestStream({
-                  facingMode: { ideal: 'environment' },
-                  width: { ideal: 1280 },
-                  height: { ideal: 960 }
-                });
-              } catch (e2) {
-                lastError = e2;
-                try {
-                  // facingMode を実装していないブラウザ向け最終フォールバック。
-                  info = await requestStream({width:{ideal:1280}, height:{ideal:960}});
-                } catch (e3) {
-                  lastError = e3;
-                }
+              video.srcObject = stream;
+              await video.play();
+
+              const track = stream.getVideoTracks?.()[0] || null;
+              const settings = track?.getSettings ? track.getSettings() : {};
+              const actualFacing = String(settings?.facingMode || '');
+              if (actualFacing === 'user' || actualFacing === 'environment') {
+                cameraFacing = actualFacing;
               }
-            }
+              video.classList.toggle('front-facing', cameraFacing === 'user');
+              const devices = await collectDeviceInfo();
+              updateLog('camera_open_success', {
+                requestedFacing: cameraFacing,
+                actualSettings:{
+                  facingMode:settings?.facingMode || null,
+                  width:settings?.width || null,
+                  height:settings?.height || null,
+                  frameRate:settings?.frameRate || null,
+                  deviceIdPresent:!!settings?.deviceId,
+                },
+                devices,
+              });
 
-            if (!info) {
-              stopCurrent();
-              status.textContent = 'カメラを開けませんでした。ブラウザのカメラ権限を確認して、もう一度押してください。';
-              badge.textContent = 'カメラを開けません';
-              retryBtn.style.display = 'block';
-              state.starting = false;
-              return;
-            }
-
-            // facingMode が取れない機種では、許可後にカメラ名から背面を探して切り替える。
-            const looksRear = (info.facing === 'environment') || /back|rear|environment|背面|後/i.test(info.label || '');
-            if (!looksRear && state.devices.length > 1) {
-              const rear = state.devices.find(d => /back|rear|environment|背面|後/i.test(d.label || ''));
-              if (rear && rear.deviceId && rear.deviceId !== info.deviceId) {
-                try {
-                  info = await requestStream({deviceId:{exact:rear.deviceId}, width:{ideal:1280}, height:{ideal:960}});
-                } catch (_) {}
-              }
-            }
-
-            const finalInfo = describeTrack(state.stream);
-            const finalRear = finalInfo.facing === 'environment' || /back|rear|environment|背面|後/i.test(finalInfo.label || '');
-            if (finalRear) {
-              badge.textContent = '外向きカメラ';
-              status.textContent = '外向きカメラで盤面全体を写して、「この盤面を撮る」を押してください。';
-            } else {
-              badge.textContent = 'カメラ';
-              status.textContent = '外向きカメラを自動判定できませんでした。「カメラ切替」で背面カメラを選んでください。';
-            }
-            captureBtn.disabled = false;
-            switchBtn.disabled = state.devices.length < 2;
-            state.starting = false;
-          }
-
-          async function switchCamera() {
-            if (state.starting) return;
-            state.starting = true;
-            switchBtn.disabled = true;
-            try {
-              await refreshDevices();
-              if (state.devices.length < 2) return;
-              let idx = state.devices.findIndex(d => d.deviceId === state.currentDeviceId);
-              idx = (idx + 1) % state.devices.length;
-              const next = state.devices[idx];
-              const info = await requestStream({deviceId:{exact:next.deviceId}, width:{ideal:1280}, height:{ideal:960}});
-              const isRear = info.facing === 'environment' || /back|rear|environment|背面|後/i.test(info.label || '');
-              badge.textContent = isRear ? '外向きカメラ' : '内向きカメラ';
-              status.textContent = isRear ? '外向きカメラに切り替えました。' : '内向きカメラです。もう一度切替できます。';
-            } catch (e) {
-              status.textContent = 'カメラ切替に失敗しました。もう一度お試しください。';
+              preview.classList.remove('is-hidden');
+              shootBtn.disabled = false;
+              switchBtn.disabled = false;
+              closeBtn.disabled = false;
+              openBtn.disabled = true;
+              status.textContent = cameraFacing === 'user'
+                ? '内側カメラが開いています。「カメラ切替」で外側に変更できます。'
+                : '外側カメラが開いています。盤面全体を入れて撮ってください。';
+            } catch (err) {
+              stopStream();
+              await emitError(err);
             } finally {
-              switchBtn.disabled = state.devices.length < 2;
-              state.starting = false;
+              if (!stream) openBtn.disabled = false;
             }
-          }
-
-          captureBtn.onclick = () => {
-            if (!state.stream || !video.videoWidth || !video.videoHeight) return;
-            const maxW = 1400;
-            const scale = Math.min(1, maxW / video.videoWidth);
-            canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-            canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-            setTriggerValue('photo', dataUrl);
           };
-          switchBtn.onclick = switchCamera;
-          retryBtn.onclick = tryRearCamera;
+          const switchCamera = async () => {
+            cameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
+            updateLog('camera_switch_requested', {requestedFacing:cameraFacing});
+            await startCamera();
+          };
+          const capturePhoto = () => {
+            try {
+              if (!stream || !video.videoWidth || !video.videoHeight) {
+                throw new Error('video frame unavailable');
+              }
+              const maxSide = 1800;
+              const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
+              canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+              canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.94);
+              updateLog('photo_captured', {width:canvas.width, height:canvas.height, facing:cameraFacing});
+              setTriggerValue('photo', dataUrl);
+              status.textContent = '撮影しました。盤面を確認します。';
+            } catch (err) {
+              emitError(err);
+            }
+          };
+          const closeCamera = () => {
+            updateLog('camera_closed');
+            stopStream();
+            status.textContent = 'カメラを閉じました。次に開くときも外側カメラから開始します。';
+            cameraFacing = 'environment';
+          };
 
-          // 同じ key で rerun されたときは既存ストリームを維持する。初回だけ自動開始。
-          if (!state.stream && !state.starting) {
-            tryRearCamera();
-          } else if (state.stream) {
-            video.srcObject = state.stream;
-            captureBtn.disabled = false;
-          }
+          openBtn.addEventListener('click', startCamera);
+          shootBtn.addEventListener('click', capturePhoto);
+          switchBtn.addEventListener('click', switchCamera);
+          closeBtn.addEventListener('click', closeCamera);
 
-          // ページ移動・コンポーネント破棄時はカメラを確実に解放する。
-          return () => { stopCurrent(); };
+          updateLog('component_ready', {defaultFacing:cameraFacing});
+
+          return () => {
+            try { openBtn.removeEventListener('click', startCamera); } catch (_) {}
+            try { shootBtn.removeEventListener('click', capturePhoto); } catch (_) {}
+            try { switchBtn.removeEventListener('click', switchCamera); } catch (_) {}
+            try { closeBtn.removeEventListener('click', closeCamera); } catch (_) {}
+            stopStream();
+          };
         }
         """,
     )
@@ -2239,28 +2290,39 @@ if st.session_state.page == "home":
     st.markdown("### 📷 盤面を撮る")
     st.caption("盤全体が入るように、なるべく真上から撮ってください。")
 
-    # ホームの主カメラは Streamlit Components v2 でブラウザのカメラを直接制御する。
-    # facingMode=environment を最初に厳密指定するため、スマホでは背面カメラが初期候補になる。
-    st.caption("起動時は外向き（背面）カメラを指定します。盤面全体を写して撮影してください。")
-    if REAR_CAMERA_COMPONENT_AVAILABLE and REAR_CAMERA_COMPONENT is not None:
-        camera_result = REAR_CAMERA_COMPONENT(
-            key="rear_board_camera_v2",
+    # 東京ぶらり旅と同系統のライブカメラ。初期値は必ず environment（背面）。
+    st.caption("「カメラを開く」を押すと、外側カメラから開始します。開けない場合はエラーログを自動表示します。")
+    if LIVE_CAMERA_COMPONENT_AVAILABLE and LIVE_CAMERA_COMPONENT is not None:
+        camera_result = LIVE_CAMERA_COMPONENT(
+            key="othello_board_live_camera_burari_style_v1",
             on_photo_change=lambda: None,
+            on_camera_error_change=lambda: None,
             width="stretch",
         )
         captured = getattr(camera_result, "photo", None)
+        camera_error = getattr(camera_result, "camera_error", None)
+
+        if camera_error:
+            if isinstance(camera_error, dict):
+                message = str(camera_error.get("message") or "カメラを開けませんでした。")
+                st.error(message)
+                with st.expander("カメラエラーログ", expanded=True):
+                    st.json(camera_error)
+            else:
+                st.error(str(camera_error))
+
         if captured:
             rear_file = camera_value_to_file(captured)
             if rear_file is None:
                 st.error("撮影画像を読み取れませんでした。もう一度撮影してください。")
             else:
-                ok, err = process_photo_file(rear_file, "背面カメラ写真")
+                ok, err = process_photo_file(rear_file, "ライブカメラ写真")
                 if ok:
                     st.rerun()
                 else:
                     st.error(err)
     else:
-        st.warning("この版のStreamlitでは背面カメラ機能を利用できません。requirements.txt も今回の版へ更新してください。")
+        st.warning("このStreamlit環境ではライブカメラ部品を利用できません。下の「別の方法で撮る」を使ってください。")
 
     # ブラウザ権限・端末相性で主カメラが開かない場合の代替手段。
     with st.expander("カメラが開かないとき / 別の方法で撮る", expanded=False):

@@ -1,9 +1,11 @@
 import math
+import json
 from functools import lru_cache
 
 import cv2
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
 # -----------------------------
@@ -381,6 +383,45 @@ hr { border-color: #d8ddd7; }
     border-radius: 18px;
     border: 1px solid var(--border);
     box-shadow: var(--shadow);
+}
+
+
+/* 音声授業 */
+.voice-mode-card {
+    border: 1px solid var(--green-border);
+    border-radius: 18px;
+    padding: .9rem 1rem;
+    margin: .55rem 0 1rem;
+    background: var(--green-soft);
+    color: var(--text);
+}
+.voice-mode-title {
+    font-weight: 900;
+    color: var(--green-dark);
+    margin-bottom: .25rem;
+}
+.voice-mode-text {
+    color: var(--text);
+    line-height: 1.55;
+}
+
+/* 子どもが問題に答える場所は、誤タップを減らすため通常ボタンより大きくする。 */
+[class*="st-key-quiz_answer_area_"] button {
+    min-height: 72px !important;
+    border-radius: 18px !important;
+    font-size: 1.12rem !important;
+    font-weight: 900 !important;
+    margin-bottom: .35rem !important;
+}
+[class*="st-key-quiz_answer_area_"] button:focus {
+    border-color: var(--green) !important;
+    box-shadow: 0 0 0 4px rgba(25,135,84,.20) !important;
+}
+.quiz-touch-note {
+    text-align:center;
+    color:var(--muted);
+    font-size:.9rem;
+    margin:.2rem 0 .7rem;
 }
 
 @media (max-width: 768px) {
@@ -1504,6 +1545,86 @@ if "photo_processed" not in st.session_state:
     st.session_state.photo_processed = None
 if "recognition_note" not in st.session_state:
     st.session_state.recognition_note = ""
+
+
+# -----------------------------
+# 音声授業（端末ブラウザの読み上げ機能を利用）
+# -----------------------------
+def speech_controls(text, play_label="🔊 音声で聞く", rate=0.86, height=66):
+    """Web Speech API で日本語を読み上げる。外部APIキーは不要。"""
+    if not text:
+        return
+    speech_text = str(text).replace("→", "、つぎに、").replace("＝", "、は、")
+    js_text = json.dumps(speech_text, ensure_ascii=False)
+    js_label = json.dumps(play_label, ensure_ascii=False)
+    components.html(
+        f"""
+        <div class="voice-row">
+          <button class="play" type="button" onclick="speakLesson()"></button>
+          <button class="stop" type="button" onclick="stopLesson()">■ とめる</button>
+        </div>
+        <script>
+          const speechText = {js_text};
+          const playLabel = {js_label};
+          const playButton = document.querySelector('.play');
+          playButton.textContent = playLabel;
+
+          function japaneseVoice() {{
+            const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+            return voices.find(v => (v.lang || '').toLowerCase().startsWith('ja')) || null;
+          }}
+
+          function speakLesson() {{
+            if (!('speechSynthesis' in window)) {{
+              playButton.textContent = 'このブラウザでは音声を使えません';
+              return;
+            }}
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(speechText);
+            u.lang = 'ja-JP';
+            u.rate = {float(rate):.2f};
+            u.pitch = 1.0;
+            const v = japaneseVoice();
+            if (v) u.voice = v;
+            window.speechSynthesis.speak(u);
+          }}
+
+          function stopLesson() {{
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+          }}
+        </script>
+        <style>
+          html, body {{ margin:0; padding:0; background:transparent; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+          .voice-row {{ display:grid; grid-template-columns:1fr auto; gap:8px; width:100%; }}
+          button {{ min-height:54px; border-radius:15px; font-weight:800; font-size:16px; cursor:pointer; }}
+          .play {{ background:#111111; color:#ffffff; border:2px solid #111111; padding:0 18px; }}
+          .play:active {{ transform:translateY(1px); }}
+          .stop {{ background:#ffffff; color:#111111; border:2px solid #cfd5ce; padding:0 16px; }}
+          .play:focus, .stop:focus {{ outline:4px solid rgba(25,135,84,.22); outline-offset:1px; }}
+        </style>
+        """,
+        height=height,
+        scrolling=False,
+    )
+
+
+def lesson_voice_text(lesson, stage):
+    parts = [
+        f"{stage['title']}。授業、{lesson['title']}。",
+        f"きょうのゴール。{lesson['goal']}。",
+        "せんせいの説明。",
+    ]
+    parts.extend(f"{i + 1}。{line}" for i, line in enumerate(lesson["teach"]))
+    parts.append(f"これだけ覚えよう。{lesson['remember']}。")
+    return " ".join(parts)
+
+
+def quiz_voice_text(quiz):
+    options = " ".join(f"{i + 1}ばん。{option}。" for i, option in enumerate(quiz["options"]))
+    return f"もんだい。{quiz['q']}。こたえをタップしてね。{options}"
+
+if "lesson_audio_mode" not in st.session_state:
+    st.session_state.lesson_audio_mode = False
 if "current_lesson" not in st.session_state:
     st.session_state.current_lesson = "01"
 if "completed_lessons" not in st.session_state:
@@ -1888,6 +2009,13 @@ elif st.session_state.page == "challenge":
 # UI: 学習（授業一覧）
 # -----------------------------
 elif st.session_state.page == "learn":
+    st.toggle("🔊 音声モード", key="lesson_audio_mode")
+    if st.session_state.lesson_audio_mode:
+        st.markdown(
+            '<div class="voice-mode-card"><div class="voice-mode-title">音声モード ON</div>'
+            '<div class="voice-mode-text">授業と問題を音声で聞けます。問題は大きなボタンをタップして答えます。</div></div>',
+            unsafe_allow_html=True,
+        )
     if st.button("← ホームへ"):
         go("home")
 
@@ -1945,6 +2073,14 @@ elif st.session_state.page == "lesson":
     if top2.button("📷 実戦へ", use_container_width=True):
         go("home")
 
+    st.toggle("🔊 音声モード", key="lesson_audio_mode")
+    if st.session_state.lesson_audio_mode:
+        st.markdown(
+            '<div class="voice-mode-card"><div class="voice-mode-title">耳で学ぶモード</div>'
+            '<div class="voice-mode-text">「授業を聞く」→「問題を聞く」→大きな答えボタンをタップ、の順で進めます。</div></div>',
+            unsafe_allow_html=True,
+        )
+
     header_html = (
         '<div class="lesson-head">'
         f'<div class="lesson-stage">{stage["title"]}｜授業 {lesson_id}</div>'
@@ -1953,6 +2089,13 @@ elif st.session_state.page == "lesson":
         '</div>'
     )
     st.markdown(header_html, unsafe_allow_html=True)
+
+    if st.session_state.lesson_audio_mode:
+        speech_controls(
+            lesson_voice_text(lesson, stage),
+            play_label="▶ 授業をゆっくり聞く",
+            rate=0.84,
+        )
 
     st.markdown("#### せんせいの説明")
     for line in lesson["teach"]:
@@ -1992,26 +2135,51 @@ elif st.session_state.page == "lesson":
 
     st.markdown("#### やってみよう")
     quiz = lesson["quiz"]
-    choice = st.radio(
-        quiz["q"],
-        quiz["options"],
-        index=None,
-        key=f"quiz_choice_{lesson_id}",
-    )
+
+    if st.session_state.lesson_audio_mode:
+        speech_controls(
+            quiz_voice_text(quiz),
+            play_label="🔊 問題と選択肢を聞く",
+            rate=0.82,
+        )
+        st.markdown('<div class="quiz-touch-note">聞いたあと、番号のボタンをタップしてね</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f"**{quiz['q']}**")
+
+    selected_key = f"quiz_selected_{lesson_id}"
     show_key = f"quiz_show_{lesson_id}"
+    if selected_key not in st.session_state:
+        st.session_state[selected_key] = None
     if show_key not in st.session_state:
         st.session_state[show_key] = False
 
-    if st.button("こたえを見る", use_container_width=True, key=f"quiz_btn_{lesson_id}"):
-        st.session_state[show_key] = True
+    with st.container(key=f"quiz_answer_area_{lesson_id}"):
+        for i, option in enumerate(quiz["options"]):
+            label = f"{i + 1}　{option}"
+            if st.button(
+                label,
+                use_container_width=True,
+                key=f"quiz_answer_{lesson_id}_{i}",
+            ):
+                st.session_state[selected_key] = option
+                st.session_state[show_key] = True
+                st.rerun()
 
+    choice = st.session_state[selected_key]
     if st.session_state[show_key]:
-        if choice is None:
-            st.info("まず、こたえを1つえらんでね。")
-        elif choice == quiz["answer"]:
-            st.success(f"せいかい！　{quiz['why']}")
+        if choice == quiz["answer"]:
+            feedback_text = f"せいかい！ {quiz['why']}"
+            st.success(feedback_text)
         else:
-            st.warning(f"もう一度見てみよう。こたえは『{quiz['answer']}』。{quiz['why']}")
+            feedback_text = f"もう一度見てみよう。こたえは、{quiz['answer']}。{quiz['why']}"
+            st.warning(feedback_text)
+
+        if st.session_state.lesson_audio_mode:
+            speech_controls(
+                feedback_text,
+                play_label="🔊 こたえの説明を聞く",
+                rate=0.82,
+            )
 
     st.markdown("---")
     next_id = next_lesson_id(lesson_id)

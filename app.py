@@ -23,22 +23,26 @@ except Exception:
 st.set_page_config(page_title="オセロせんせい", page_icon="⚫", layout="centered")
 
 # -----------------------------
-# ライブカメラ（東京ぶらり旅と同系統の実装）
+# ライブカメラ（東京ぶらり旅の方式に合わせた実装）
 # -----------------------------
-# 東京ぶらり旅と同じ考え方で、ブラウザの getUserMedia() を直接使う。
-# 初期値は必ず environment（背面）。exact 指定は使わず ideal 指定にして、
-# Android/Chrome が実際に利用できる背面カメラへ自然にフォールバックできるようにする。
+# 東京ぶらり旅と同じ基本方式：
+# - navigator.mediaDevices.getUserMedia() を直接利用
+# - 初期 cameraFacing は environment（背面）
+# - facingMode は exact ではなく ideal
+# - 写真モードは height:{ideal:1600}
+# オセロ側ではさらに、Streamlit の再描画後に古い自前ストリームが残って
+# カメラを占有しないよう globalThis 上の前回ストリームも明示的に停止する。
 LIVE_CAMERA_COMPONENT_AVAILABLE = hasattr(st.components, "v2")
 LIVE_CAMERA_COMPONENT = None
 if LIVE_CAMERA_COMPONENT_AVAILABLE:
     LIVE_CAMERA_COMPONENT = st.components.v2.component(
-        name="othello_live_camera_burari_style_v1",
+        name="othello_live_camera_burari_style_v2",
         html="""
         <div class="camera-shell">
           <div id="cameraPreview" class="camera-preview is-hidden">
             <video id="cameraVideo" autoplay playsinline muted></video>
           </div>
-          <div id="cameraStatus" class="camera-status">外側カメラで盤面を撮影します。</div>
+          <div id="cameraStatus" class="camera-status">外側カメラを準備しています…</div>
           <div class="camera-actions">
             <button id="cameraOpen" class="camera-primary" type="button">📷 カメラを開く</button>
             <button id="cameraShoot" class="camera-primary" type="button" disabled>● この盤面を撮る</button>
@@ -47,7 +51,7 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
           </div>
           <details id="cameraDebugPanel" class="camera-debug">
             <summary>カメラエラーログ</summary>
-            <pre id="cameraDebugLog">エラーはまだありません。</pre>
+            <pre id="cameraDebugLog">起動ログを記録しています。</pre>
           </details>
           <canvas id="cameraCanvas" hidden></canvas>
         </div>
@@ -106,19 +110,25 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
           const closeBtn = parentElement.querySelector('#cameraClose');
           const debugPanel = parentElement.querySelector('#cameraDebugPanel');
           const debugLog = parentElement.querySelector('#cameraDebugLog');
-          if (!video || video.__othelloCameraBound) return;
-          video.__othelloCameraBound = true;
+          if (!video || video.__othelloCameraBoundV2) return;
+          video.__othelloCameraBoundV2 = true;
 
           let stream = null;
-          // ぶらり旅と同じく初期値は背面。保存済みの前面設定は読み込まない。
           let cameraFacing = 'environment';
+          let requestSerial = 0;
+          let opening = false;
+          let currentStage = 'component_ready';
+          let autoStartTimer = null;
+          const GLOBAL_STREAM_KEY = '__othello_live_camera_stream_v2';
           const events = [];
 
           const now = () => new Date().toISOString();
+          const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
           const safeError = (err) => ({
             name: err?.name || 'CameraError',
             message: err?.message || String(err || ''),
             constraint: err?.constraint || null,
+            stage: currentStage,
           });
           const baseDiagnostics = () => ({
             time: now(),
@@ -130,10 +140,11 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
             mediaDevices: !!navigator.mediaDevices,
             getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
             requestedFacing: cameraFacing,
+            stage: currentStage,
           });
           const updateLog = (event, detail={}) => {
             events.push({time:now(), event, ...detail});
-            debugLog.textContent = JSON.stringify({environment:baseDiagnostics(), events:events.slice(-30)}, null, 2);
+            debugLog.textContent = JSON.stringify({environment:baseDiagnostics(), events:events.slice(-40)}, null, 2);
           };
           const cameraErrorMessage = (err) => {
             const name = err?.name || '';
@@ -144,7 +155,7 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
               return '利用できるカメラが見つかりませんでした。';
             }
             if (name === 'NotReadableError' || name === 'TrackStartError') {
-              return 'カメラを開けませんでした。ほかのアプリがカメラを使っていないか確認してください。';
+              return 'カメラ端末を開始できませんでした。アプリ内の古いカメラ接続を解放して再試行しましたが開けませんでした。ほかのタブやアプリがカメラを使用していないか確認してください。';
             }
             if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
               return '指定したカメラ条件を端末が満たせませんでした。';
@@ -154,114 +165,241 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
             }
             return 'カメラを開けませんでした。下のエラーログを確認してください。';
           };
-          const stopStream = () => {
+
+          const releaseGlobalStream = () => {
             try {
-              if (stream) stream.getTracks().forEach(t => t.stop());
+              const oldStream = globalThis[GLOBAL_STREAM_KEY];
+              if (oldStream && oldStream !== stream && oldStream.getTracks) {
+                oldStream.getTracks().forEach(track => {
+                  try { track.stop(); } catch (_) {}
+                });
+                updateLog('stale_component_stream_released');
+              }
+              if (oldStream && oldStream !== stream) globalThis[GLOBAL_STREAM_KEY] = null;
+            } catch (err) {
+              updateLog('stale_component_stream_release_error', {error:safeError(err)});
+            }
+          };
+
+          const stopStream = (reason='stop_stream') => {
+            try {
+              if (stream && stream.getTracks) {
+                stream.getTracks().forEach(track => {
+                  try { track.stop(); } catch (_) {}
+                });
+              }
+            } catch (_) {}
+            try {
+              if (globalThis[GLOBAL_STREAM_KEY] === stream) globalThis[GLOBAL_STREAM_KEY] = null;
             } catch (_) {}
             stream = null;
+            try { video.pause(); } catch (_) {}
             video.srcObject = null;
             preview.classList.add('is-hidden');
             shootBtn.disabled = true;
             switchBtn.disabled = true;
             closeBtn.disabled = true;
             openBtn.disabled = false;
+            updateLog(reason);
           };
+
           const collectDeviceInfo = async () => {
             try {
               if (!navigator.mediaDevices?.enumerateDevices) return [];
               const devices = await navigator.mediaDevices.enumerateDevices();
               return devices
                 .filter(d => d.kind === 'videoinput')
-                .map((d, i) => ({index:i, label:d.label || '(label unavailable)', deviceIdPresent:!!d.deviceId}));
+                .map((d, i) => ({
+                  index:i,
+                  label:d.label || '(label unavailable)',
+                  deviceIdPresent:!!d.deviceId,
+                  groupIdPresent:!!d.groupId,
+                }));
             } catch (err) {
               return [{enumerateDevicesError:safeError(err)}];
             }
           };
-          const emitError = async (err) => {
+
+          const preferredVideoConstraints = () => ({
+            facingMode:{ideal:cameraFacing},
+            height:{ideal:1600},
+          });
+
+          const emitError = async (err, attempts=[]) => {
             const message = cameraErrorMessage(err);
             const devices = await collectDeviceInfo();
             const error = safeError(err);
-            updateLog('camera_open_error', {error, devices});
+            updateLog('camera_open_error_final', {error, devices, attempts});
             status.textContent = message;
             debugPanel.open = true;
+            openBtn.textContent = '📷 もう一度カメラを開く';
             setTriggerValue('camera_error', {
               name:error.name,
               message,
               detail:error.message,
               constraint:error.constraint,
+              stage:error.stage,
+              requestedFacing:cameraFacing,
               diagnostics:baseDiagnostics(),
               devices,
-              events:events.slice(-30),
+              attempts,
+              events:events.slice(-40),
             });
           };
-          const startCamera = async () => {
-            stopStream();
+
+          const requestCameraOnce = async (serial, attemptNo) => {
+            currentStage = 'before_getUserMedia';
+            updateLog('getUserMedia_begin', {
+              serial,
+              attemptNo,
+              requestedFacing:cameraFacing,
+              constraints:preferredVideoConstraints(),
+            });
+            currentStage = 'getUserMedia';
+            const requestedStream = await navigator.mediaDevices.getUserMedia({
+              audio:false,
+              video:preferredVideoConstraints(),
+            });
+            if (serial !== requestSerial) {
+              try { requestedStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+              throw Object.assign(new Error('superseded camera request'), {name:'AbortError'});
+            }
+            currentStage = 'stream_received';
+            stream = requestedStream;
+            globalThis[GLOBAL_STREAM_KEY] = stream;
+            updateLog('camera_stream_received', {
+              serial,
+              attemptNo,
+              videoTracks:stream.getVideoTracks ? stream.getVideoTracks().length : null,
+            });
+
+            currentStage = 'video_play';
+            video.srcObject = stream;
+            await video.play();
+            currentStage = 'track_settings';
+
+            const track = stream.getVideoTracks?.()[0] || null;
+            const settings = track?.getSettings ? track.getSettings() : {};
+            const actualFacing = String(settings?.facingMode || '');
+            if (actualFacing === 'user' || actualFacing === 'environment') cameraFacing = actualFacing;
+            video.classList.toggle('front-facing', cameraFacing === 'user');
+            const devices = await collectDeviceInfo();
+            updateLog('camera_open_success', {
+              serial,
+              attemptNo,
+              requestedFacing:'environment',
+              actualFacing:cameraFacing,
+              actualSettings:{
+                facingMode:settings?.facingMode || null,
+                width:settings?.width || null,
+                height:settings?.height || null,
+                frameRate:settings?.frameRate || null,
+                deviceIdPresent:!!settings?.deviceId,
+              },
+              devices,
+            });
+            currentStage = 'open';
+            return {settings, devices};
+          };
+
+          const startCamera = async ({auto=false}={}) => {
+            if (opening) return;
+            opening = true;
+            const serial = ++requestSerial;
+            const attempts = [];
+            releaseGlobalStream();
+            stopStream('local_stream_released_before_open');
             openBtn.disabled = true;
-            status.textContent = cameraFacing === 'environment'
-              ? '外側カメラを開いています…'
-              : '内側カメラを開いています…';
-            updateLog('camera_open_requested', {requestedFacing:cameraFacing});
+            openBtn.textContent = auto ? '📷 外側カメラを起動中…' : '📷 カメラを起動中…';
+            status.textContent = '外側カメラを開いています…';
+            cameraFacing = 'environment';
+            currentStage = 'preflight';
+            updateLog('camera_open_requested', {serial, auto, requestedFacing:cameraFacing});
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-              await emitError({name:'Unsupported', message:'navigator.mediaDevices.getUserMedia is unavailable'});
-              openBtn.disabled = false;
+              await emitError({name:'Unsupported', message:'navigator.mediaDevices.getUserMedia is unavailable'}, attempts);
+              opening = false;
               return;
             }
 
-            try {
-              // 東京ぶらり旅と同じ考え方：exact ではなく ideal を使う。
-              stream = await navigator.mediaDevices.getUserMedia({
-                audio:false,
-                video:{
-                  facingMode:{ideal:cameraFacing},
-                  height:{ideal:1600},
-                },
-              });
-              video.srcObject = stream;
-              await video.play();
-
-              const track = stream.getVideoTracks?.()[0] || null;
-              const settings = track?.getSettings ? track.getSettings() : {};
-              const actualFacing = String(settings?.facingMode || '');
-              if (actualFacing === 'user' || actualFacing === 'environment') {
-                cameraFacing = actualFacing;
+            let finalError = null;
+            for (let attemptNo = 1; attemptNo <= 2; attemptNo += 1) {
+              try {
+                if (attemptNo > 1) {
+                  currentStage = 'retry_wait';
+                  status.textContent = 'カメラ接続をいったん解放して再試行しています…';
+                  releaseGlobalStream();
+                  stopStream('retry_stream_release');
+                  await sleep(900);
+                }
+                const result = await requestCameraOnce(serial, attemptNo);
+                attempts.push({attemptNo, result:'success', facing:cameraFacing, settings:result.settings || {}});
+                preview.classList.remove('is-hidden');
+                shootBtn.disabled = false;
+                switchBtn.disabled = false;
+                closeBtn.disabled = false;
+                openBtn.disabled = true;
+                openBtn.textContent = '📷 カメラを開く';
+                status.textContent = cameraFacing === 'user'
+                  ? '内側カメラが開きました。「カメラ切替」で外側に変更できます。'
+                  : '外側カメラが開いています。盤面全体を入れて撮ってください。';
+                setTriggerValue('camera_status', {
+                  status:'opened',
+                  facing:cameraFacing,
+                  settings:result.settings || {},
+                  attempts,
+                });
+                opening = false;
+                return;
+              } catch (err) {
+                finalError = err;
+                attempts.push({attemptNo, result:'error', error:safeError(err)});
+                updateLog('camera_attempt_error', {attemptNo, error:safeError(err)});
+                stopStream('camera_attempt_failed_stream_release');
+                const retryable = ['NotReadableError','TrackStartError','AbortError'].includes(err?.name || '');
+                if (!retryable || attemptNo >= 2) break;
               }
-              video.classList.toggle('front-facing', cameraFacing === 'user');
-              const devices = await collectDeviceInfo();
-              updateLog('camera_open_success', {
-                requestedFacing: cameraFacing,
-                actualSettings:{
-                  facingMode:settings?.facingMode || null,
-                  width:settings?.width || null,
-                  height:settings?.height || null,
-                  frameRate:settings?.frameRate || null,
-                  deviceIdPresent:!!settings?.deviceId,
-                },
-                devices,
-              });
+            }
 
+            currentStage = 'failed';
+            await emitError(finalError || {name:'CameraError', message:'unknown camera error'}, attempts);
+            openBtn.disabled = false;
+            opening = false;
+          };
+
+          const switchCamera = async () => {
+            if (opening) return;
+            cameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
+            updateLog('camera_switch_requested', {requestedFacing:cameraFacing});
+            // 切替時だけ選択した向きを維持する。startCamera は常に environment に戻すため、
+            // ここでは同じ処理を直接呼び出す。
+            opening = true;
+            const serial = ++requestSerial;
+            releaseGlobalStream();
+            stopStream('switch_stream_release');
+            openBtn.disabled = true;
+            status.textContent = cameraFacing === 'user' ? '内側カメラに切り替えています…' : '外側カメラに切り替えています…';
+            try {
+              const result = await requestCameraOnce(serial, 1);
               preview.classList.remove('is-hidden');
               shootBtn.disabled = false;
               switchBtn.disabled = false;
               closeBtn.disabled = false;
               openBtn.disabled = true;
-              status.textContent = cameraFacing === 'user'
-                ? '内側カメラが開いています。「カメラ切替」で外側に変更できます。'
-                : '外側カメラが開いています。盤面全体を入れて撮ってください。';
+              status.textContent = cameraFacing === 'user' ? '内側カメラが開いています。' : '外側カメラが開いています。';
+              setTriggerValue('camera_status', {status:'opened', facing:cameraFacing, settings:result.settings || {}});
             } catch (err) {
-              stopStream();
-              await emitError(err);
+              stopStream('camera_switch_failed_stream_release');
+              currentStage = 'failed';
+              await emitError(err, [{attemptNo:1, result:'error', error:safeError(err)}]);
             } finally {
-              if (!stream) openBtn.disabled = false;
+              opening = false;
             }
           };
-          const switchCamera = async () => {
-            cameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
-            updateLog('camera_switch_requested', {requestedFacing:cameraFacing});
-            await startCamera();
-          };
+
           const capturePhoto = () => {
             try {
+              currentStage = 'capture';
               if (!stream || !video.videoWidth || !video.videoHeight) {
                 throw new Error('video frame unavailable');
               }
@@ -276,29 +414,38 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
               setTriggerValue('photo', dataUrl);
               status.textContent = '撮影しました。盤面を確認します。';
             } catch (err) {
-              emitError(err);
+              emitError(err, []);
             }
           };
+
           const closeCamera = () => {
+            requestSerial += 1;
             updateLog('camera_closed');
-            stopStream();
-            status.textContent = 'カメラを閉じました。次に開くときも外側カメラから開始します。';
+            stopStream('camera_closed_stream_release');
+            status.textContent = 'カメラを閉じました。次に開くときは外側カメラから開始します。';
             cameraFacing = 'environment';
+            openBtn.textContent = '📷 カメラを開く';
           };
 
-          openBtn.addEventListener('click', startCamera);
+          openBtn.addEventListener('click', () => startCamera({auto:false}));
           shootBtn.addEventListener('click', capturePhoto);
           switchBtn.addEventListener('click', switchCamera);
           closeBtn.addEventListener('click', closeCamera);
 
           updateLog('component_ready', {defaultFacing:cameraFacing});
+          // ぶらり旅と同様、カメラ画面に入ったら自動で外側カメラを開く。
+          autoStartTimer = setTimeout(() => {
+            if (document.visibilityState === 'visible') startCamera({auto:true});
+          }, 350);
 
           return () => {
-            try { openBtn.removeEventListener('click', startCamera); } catch (_) {}
-            try { shootBtn.removeEventListener('click', capturePhoto); } catch (_) {}
-            try { switchBtn.removeEventListener('click', switchCamera); } catch (_) {}
-            try { closeBtn.removeEventListener('click', closeCamera); } catch (_) {}
-            stopStream();
+            if (autoStartTimer) clearTimeout(autoStartTimer);
+            requestSerial += 1;
+            try { openBtn.replaceWith(openBtn.cloneNode(true)); } catch (_) {}
+            try { shootBtn.replaceWith(shootBtn.cloneNode(true)); } catch (_) {}
+            try { switchBtn.replaceWith(switchBtn.cloneNode(true)); } catch (_) {}
+            try { closeBtn.replaceWith(closeBtn.cloneNode(true)); } catch (_) {}
+            stopStream('component_cleanup_stream_release');
           };
         }
         """,
@@ -2291,7 +2438,7 @@ if st.session_state.page == "home":
     st.caption("盤全体が入るように、なるべく真上から撮ってください。")
 
     # 東京ぶらり旅と同系統のライブカメラ。初期値は必ず environment（背面）。
-    st.caption("「カメラを開く」を押すと、外側カメラから開始します。開けない場合はエラーログを自動表示します。")
+    st.caption("この画面を開くと外側カメラを自動で起動します。開けない場合は一度解放して再試行し、原因をエラーログに表示します。")
     if LIVE_CAMERA_COMPONENT_AVAILABLE and LIVE_CAMERA_COMPONENT is not None:
         camera_result = LIVE_CAMERA_COMPONENT(
             key="othello_board_live_camera_burari_style_v1",

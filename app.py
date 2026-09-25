@@ -36,7 +36,7 @@ LIVE_CAMERA_COMPONENT_AVAILABLE = hasattr(st.components, "v2")
 LIVE_CAMERA_COMPONENT = None
 if LIVE_CAMERA_COMPONENT_AVAILABLE:
     LIVE_CAMERA_COMPONENT = st.components.v2.component(
-        name="othello_live_camera_burari_style_v2",
+        name="othello_live_camera_burari_style_v3",
         html="""
         <div class="camera-shell">
           <div id="cameraPreview" class="camera-preview is-hidden">
@@ -99,7 +99,7 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
         }
         """,
         js=r"""
-        export default function({ parentElement, setTriggerValue }) {
+        export default function({ parentElement, setTriggerValue, data }) {
           const preview = parentElement.querySelector('#cameraPreview');
           const video = parentElement.querySelector('#cameraVideo');
           const canvas = parentElement.querySelector('#cameraCanvas');
@@ -118,12 +118,10 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
           let requestSerial = 0;
           let opening = false;
           let currentStage = 'component_ready';
-          let autoStartTimer = null;
           const GLOBAL_STREAM_KEY = '__othello_live_camera_stream_v2';
           const events = [];
 
           const now = () => new Date().toISOString();
-          const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
           const safeError = (err) => ({
             name: err?.name || 'CameraError',
             message: err?.message || String(err || ''),
@@ -303,7 +301,10 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
           };
 
           const startCamera = async ({auto=false}={}) => {
-            if (opening) return;
+            if (opening) {
+              updateLog('camera_open_ignored_while_opening', {auto});
+              return;
+            }
             opening = true;
             const serial = ++requestSerial;
             const attempts = [];
@@ -322,49 +323,34 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
               return;
             }
 
-            let finalError = null;
-            for (let attemptNo = 1; attemptNo <= 2; attemptNo += 1) {
-              try {
-                if (attemptNo > 1) {
-                  currentStage = 'retry_wait';
-                  status.textContent = 'カメラ接続をいったん解放して再試行しています…';
-                  releaseGlobalStream();
-                  stopStream('retry_stream_release');
-                  await sleep(900);
-                }
-                const result = await requestCameraOnce(serial, attemptNo);
-                attempts.push({attemptNo, result:'success', facing:cameraFacing, settings:result.settings || {}});
-                preview.classList.remove('is-hidden');
-                shootBtn.disabled = false;
-                switchBtn.disabled = false;
-                closeBtn.disabled = false;
-                openBtn.disabled = true;
-                openBtn.textContent = '📷 カメラを開く';
-                status.textContent = cameraFacing === 'user'
-                  ? '内側カメラが開きました。「カメラ切替」で外側に変更できます。'
-                  : '外側カメラが開いています。盤面全体を入れて撮ってください。';
-                setTriggerValue('camera_status', {
-                  status:'opened',
-                  facing:cameraFacing,
-                  settings:result.settings || {},
-                  attempts,
-                });
-                opening = false;
-                return;
-              } catch (err) {
-                finalError = err;
-                attempts.push({attemptNo, result:'error', error:safeError(err)});
-                updateLog('camera_attempt_error', {attemptNo, error:safeError(err)});
-                stopStream('camera_attempt_failed_stream_release');
-                const retryable = ['NotReadableError','TrackStartError','AbortError'].includes(err?.name || '');
-                if (!retryable || attemptNo >= 2) break;
-              }
+            try {
+              const result = await requestCameraOnce(serial, 1);
+              attempts.push({attemptNo:1, result:'success', facing:cameraFacing, settings:result.settings || {}});
+              preview.classList.remove('is-hidden');
+              shootBtn.disabled = false;
+              switchBtn.disabled = false;
+              closeBtn.disabled = false;
+              openBtn.disabled = true;
+              openBtn.textContent = '📷 カメラを開く';
+              status.textContent = cameraFacing === 'user'
+                ? '内側カメラが開きました。「カメラ切替」で外側に変更できます。'
+                : '外側カメラが開いています。盤面全体を入れて撮ってください。';
+              setTriggerValue('camera_status', {
+                status:'opened',
+                facing:cameraFacing,
+                settings:result.settings || {},
+                attempts,
+              });
+            } catch (err) {
+              attempts.push({attemptNo:1, result:'error', error:safeError(err)});
+              updateLog('camera_attempt_error', {attemptNo:1, error:safeError(err)});
+              stopStream('camera_attempt_failed_stream_release');
+              currentStage = 'failed';
+              await emitError(err || {name:'CameraError', message:'unknown camera error'}, attempts);
+              openBtn.disabled = false;
+            } finally {
+              opening = false;
             }
-
-            currentStage = 'failed';
-            await emitError(finalError || {name:'CameraError', message:'unknown camera error'}, attempts);
-            openBtn.disabled = false;
-            opening = false;
           };
 
           const switchCamera = async () => {
@@ -432,14 +418,17 @@ if LIVE_CAMERA_COMPONENT_AVAILABLE:
           switchBtn.addEventListener('click', switchCamera);
           closeBtn.addEventListener('click', closeCamera);
 
-          updateLog('component_ready', {defaultFacing:cameraFacing});
-          // ぶらり旅と同様、カメラ画面に入ったら自動で外側カメラを開く。
-          autoStartTimer = setTimeout(() => {
-            if (document.visibilityState === 'visible') startCamera({auto:true});
-          }, 350);
+          updateLog('component_ready', {defaultFacing:cameraFacing, autoStart:!!data?.auto_start});
+          // 東京ぶらり旅と同じく、Python側から auto_start=True が渡された時だけ1回起動する。
+          // Streamlit の再実行や camera_error 更新でコンポーネントが描画され直しても、
+          // auto_start=False なら二重に getUserMedia() を呼ばない。
+          if (data?.auto_start) {
+            queueMicrotask(() => {
+              if (document.visibilityState === 'visible') startCamera({auto:true});
+            });
+          }
 
           return () => {
-            if (autoStartTimer) clearTimeout(autoStartTimer);
             requestSerial += 1;
             try { openBtn.replaceWith(openBtn.cloneNode(true)); } catch (_) {}
             try { shootBtn.replaceWith(shootBtn.cloneNode(true)); } catch (_) {}
@@ -2410,9 +2399,17 @@ if "challenge_correct" not in st.session_state:
     st.session_state.challenge_correct = 0
 if "challenge_board" not in st.session_state:
     new_challenge(1, 0)
+if "_home_camera_auto_start_pending" not in st.session_state:
+    # 東京ぶらり旅と同じく、画面初回表示時だけ自動起動する。
+    # camera_error 等による Streamlit 再実行では再度起動しない。
+    st.session_state._home_camera_auto_start_pending = True
 
 
 def go(page):
+    # ホームへ戻る操作では、次のホーム描画で1回だけ背面カメラを自動起動する。
+    # 同一ページ内の通常rerunでは再起動しない。
+    if page == "home" and st.session_state.get("page") != "home":
+        st.session_state._home_camera_auto_start_pending = True
     st.session_state.page = page
     st.rerun()
 
@@ -2440,8 +2437,13 @@ if st.session_state.page == "home":
     # 東京ぶらり旅と同系統のライブカメラ。初期値は必ず environment（背面）。
     st.caption("この画面を開くと外側カメラを自動で起動します。開けない場合は一度解放して再試行し、原因をエラーログに表示します。")
     if LIVE_CAMERA_COMPONENT_AVAILABLE and LIVE_CAMERA_COMPONENT is not None:
+        # 自動起動フラグは1回だけ消費する。エラー表示のためにStreamlitが再実行されても
+        # 同じカメラをもう一度自動起動しない（東京ぶらり旅と同じ制御）。
+        camera_auto_start = bool(st.session_state.get("_home_camera_auto_start_pending", False))
+        st.session_state._home_camera_auto_start_pending = False
         camera_result = LIVE_CAMERA_COMPONENT(
-            key="othello_board_live_camera_burari_style_v1",
+            data={"auto_start": camera_auto_start},
+            key="othello_board_live_camera_burari_style_v2",
             on_photo_change=lambda: None,
             on_camera_error_change=lambda: None,
             width="stretch",
